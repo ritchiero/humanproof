@@ -1,12 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { collection, doc, setDoc, getDocs, query, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-// In-memory store — persists as long as the Next.js server is running.
-// For hackathon this is fine. In production, this would be Firestore.
+// In-memory cache (supplements Firestore)
 const logsStore: any[] = [];
 let projectsStore: any[] = [];
 let stagesStore: Record<string, string> = {};
 
+async function persistLogToFirestore(log: any) {
+  if (!db) return;
+  try {
+    await setDoc(doc(db, 'logs', log.id), log);
+  } catch (e) {
+    console.error('[logs] Firestore persist error:', e);
+  }
+}
+
+async function persistProjectToFirestore(project: any) {
+  if (!db) return;
+  try {
+    await setDoc(doc(db, 'projects', project.id), project);
+  } catch (e) {
+    console.error('[logs] Firestore project persist error:', e);
+  }
+}
+
 export async function GET() {
+  // If in-memory is empty, load from Firestore
+  if (logsStore.length === 0 && db) {
+    try {
+      const q = query(collection(db, 'logs'), orderBy('timestamp', 'desc'));
+      const snap = await getDocs(q);
+      for (const d of snap.docs) {
+        const data = d.data();
+        if (!logsStore.find((l) => l.id === data.id)) {
+          logsStore.push(data);
+        }
+      }
+    } catch (e) {
+      console.error('[logs] Firestore load error:', e);
+    }
+  }
+
   return NextResponse.json({
     logs: logsStore,
     projects: projectsStore,
@@ -20,10 +55,11 @@ export async function POST(req: NextRequest) {
 
     // Save a single log
     if (body.type === 'log' && body.data) {
-      // Avoid duplicates
       if (!logsStore.find((l) => l.id === body.data.id)) {
         logsStore.push(body.data);
       }
+      // Persist to Firestore
+      persistLogToFirestore(body.data);
       return NextResponse.json({ ok: true, count: logsStore.length });
     }
 
@@ -33,6 +69,8 @@ export async function POST(req: NextRequest) {
         if (!logsStore.find((l) => l.id === log.id)) {
           logsStore.push(log);
         }
+        // Persist each to Firestore
+        persistLogToFirestore(log);
       }
       return NextResponse.json({ ok: true, count: logsStore.length });
     }
@@ -40,6 +78,9 @@ export async function POST(req: NextRequest) {
     // Save projects (from auto-detect)
     if (body.type === 'projects' && body.projects) {
       projectsStore = body.projects;
+      for (const p of body.projects) {
+        if (p.id) persistProjectToFirestore(p);
+      }
       return NextResponse.json({ ok: true });
     }
 
