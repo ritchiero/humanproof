@@ -26,20 +26,27 @@ interface FlowEdge {
 
 // ── Constants ────────────────────────────────────────────────────
 
-const PLATFORM_COLORS: Record<string, { bg: string; border: string; text: string; line: string }> = {
-  chatgpt: { bg: '#dcfce7', border: '#16a34a', text: '#166534', line: '#22c55e' },
-  claude: { bg: '#fff7ed', border: '#ea580c', text: '#9a3412', line: '#f97316' },
-  midjourney: { bg: '#dbeafe', border: '#2563eb', text: '#1e40af', line: '#3b82f6' },
-  figma: { bg: '#f3e8ff', border: '#9333ea', text: '#6b21a8', line: '#a855f7' },
-  manual: { bg: '#f1f5f9', border: '#64748b', text: '#334155', line: '#94a3b8' },
+const PLATFORM_COLORS: Record<string, { bg: string; border: string; text: string; line: string; badge: string }> = {
+  chatgpt: { bg: '#dcfce7', border: '#16a34a', text: '#166534', line: '#22c55e', badge: '#10b981' },
+  claude: { bg: '#fff7ed', border: '#ea580c', text: '#9a3412', line: '#f97316', badge: '#f97316' },
+  midjourney: { bg: '#dbeafe', border: '#2563eb', text: '#1e40af', line: '#3b82f6', badge: '#3b82f6' },
+  figma: { bg: '#f3e8ff', border: '#9333ea', text: '#6b21a8', line: '#a855f7', badge: '#a855f7' },
+  manual: { bg: '#f1f5f9', border: '#64748b', text: '#334155', line: '#94a3b8', badge: '#64748b' },
+};
+
+const BRANCH_COLORS = {
+  revision: '#a855f7', // purple for revision branches
+  platformSwitch: '#ea580c', // orange for platform switches
+  main: '#3b82f6', // blue for main branch
 };
 
 const NODE_W = 280;
-const NODE_H = 72;
-const ROW_H = 100; // vertical spacing between rows
-const TRACK_W = 160; // horizontal spacing between tracks
+const NODE_H = 64;
+const ROW_H = 110; // vertical spacing between rows
+const TRACK_W = 320; // horizontal spacing between tracks (each track is 320px from center)
 const CENTER_X = 500; // center of the trunk
 const PADDING_TOP = 60;
+const DOT_RADIUS = 8; // 16px diameter dots
 
 // ── Creative Stages ──────────────────────────────────────────────
 
@@ -325,8 +332,73 @@ export default function FlowPage() {
 
   const nodeById = new Map(nodes.map(n => [n.id, n]));
 
-  // Track lines — vertical lines for each conversation track
-  function renderTrackLines() {
+  // Render SVG: main vertical line, branch curves, and dots
+  function renderSVGLayer() {
+    const lines = [];
+    const dots = [];
+
+    // Main vertical line (trunk) — solid blue #3b82f6, 3px, center at 50% width
+    const mainNodes = nodes.filter(n => n.track === 0);
+    if (mainNodes.length > 0) {
+      const firstMainY = mainNodes[0].y + NODE_H / 2;
+      const lastMainY = mainNodes[mainNodes.length - 1].y + NODE_H / 2;
+      lines.push(
+        <line
+          key="main-trunk"
+          x1={CENTER_X}
+          y1={firstMainY}
+          x2={CENTER_X}
+          y2={lastMainY}
+          stroke={BRANCH_COLORS.main}
+          strokeWidth={3}
+          opacity={1}
+        />
+      );
+    }
+
+    // Branch lines with curves
+    for (const edge of edges) {
+      if (edge.type === 'sequential' || !nodeById.get(edge.from) || !nodeById.get(edge.to)) continue;
+
+      const from = nodeById.get(edge.from)!;
+      const to = nodeById.get(edge.to)!;
+
+      // Only draw branch/merge lines here (curved paths)
+      if (from.track === to.track) continue;
+
+      const x1 = CENTER_X + from.track * TRACK_W;
+      const y1 = from.y + NODE_H / 2;
+      const x2 = CENTER_X + to.track * TRACK_W;
+      const y2 = to.y + NODE_H / 2;
+
+      // Determine color based on edge type
+      let lineColor = BRANCH_COLORS.revision;
+      if (edge.type === 'cross-platform') {
+        lineColor = BRANCH_COLORS.platformSwitch;
+      } else if (edge.type === 'merge') {
+        lineColor = BRANCH_COLORS.revision;
+      }
+
+      // Cubic bezier curve for branch
+      const midY = (y1 + y2) / 2;
+      const cp1x = x1 + (x2 - x1) * 0.3;
+      const cp1y = y1 + (midY - y1) * 0.5;
+      const cp2x = x2 - (x2 - x1) * 0.3;
+      const cp2y = y2 - (y2 - midY) * 0.5;
+      const path = `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`;
+      lines.push(
+        <path
+          key={`branch-${edge.from}-${edge.to}`}
+          d={path}
+          fill="none"
+          stroke={lineColor}
+          strokeWidth={2}
+          opacity={0.6}
+        />
+      );
+    }
+
+    // Add straight vertical lines for each branch track
     const trackNodes = new Map<number, FlowNode[]>();
     for (const n of nodes) {
       const arr = trackNodes.get(n.track) || [];
@@ -334,162 +406,168 @@ export default function FlowPage() {
       trackNodes.set(n.track, arr);
     }
 
-    return Array.from(trackNodes.entries()).map(([track, tNodes]) => {
-      if (tNodes.length < 2) return null;
-      const platform = tNodes[0].log.platform;
-      const colors = PLATFORM_COLORS[platform] || PLATFORM_COLORS.manual;
-      const points = tNodes.map(n => ({
-        x: n.x + NODE_W / 2,
-        y1: n.y,
-        y2: n.y + NODE_H,
-      }));
+    for (const [track, tNodes] of trackNodes) {
+      if (track === 0 || tNodes.length < 2) continue;
 
-      const segments = [];
-      for (let i = 0; i < points.length - 1; i++) {
-        segments.push(
-          <line
-            key={`track-${track}-${i}`}
-            x1={points[i].x} y1={points[i].y2}
-            x2={points[i + 1].x} y2={points[i + 1].y1}
-            stroke={colors.line} strokeWidth={3} opacity={0.25}
-          />
-        );
-      }
-      return <g key={`track-${track}`}>{segments}</g>;
-    });
-  }
+      const x = CENTER_X + track * TRACK_W;
+      const firstY = tNodes[0].y + NODE_H / 2;
+      const lastY = tNodes[tNodes.length - 1].y + NODE_H / 2;
 
-  function renderEdge(edge: FlowEdge, i: number) {
-    const from = nodeById.get(edge.from);
-    const to = nodeById.get(edge.to);
-    if (!from || !to) return null;
-
-    const x1 = from.x + NODE_W / 2;
-    const y1 = from.y + NODE_H;
-    const x2 = to.x + NODE_W / 2;
-    const y2 = to.y;
-
-    const isBranch = edge.type === 'branch' || edge.type === 'cross-platform';
-    const isMerge = edge.type === 'merge';
-
-    const color = isMerge ? '#9333ea' :
-      edge.type === 'cross-platform' ? '#ea580c' :
-      edge.type === 'branch' ? '#3b82f6' :
-      '#d1d5db';
-
-    const opacity = isMerge ? 0.5 : isBranch ? 0.7 : 0.4;
-    const strokeWidth = isMerge ? 2.5 : isBranch ? 2 : 2;
-    const dashArray = (isBranch || isMerge) ? '8,5' : 'none';
-
-    if (from.track !== to.track) {
-      // Curved connection between tracks
-      const midY = (y1 + y2) / 2;
-      const cp1x = x1;
-      const cp1y = y1 + (midY - y1) * 0.7;
-      const cp2x = x2;
-      const cp2y = y2 - (y2 - midY) * 0.7;
-      const path = `M ${x1} ${y1} C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${x2} ${y2}`;
-      return (
-        <g key={`edge-${i}`}>
-          <path d={path} fill="none" stroke={color} strokeWidth={strokeWidth}
-            strokeDasharray={dashArray} opacity={opacity} />
-          <circle cx={x2} cy={y2} r={4} fill={color} opacity={opacity} />
-        </g>
+      // Draw vertical line for this branch
+      lines.push(
+        <line
+          key={`track-${track}`}
+          x1={x}
+          y1={firstY}
+          x2={x}
+          y2={lastY}
+          stroke={BRANCH_COLORS.revision}
+          strokeWidth={2}
+          opacity={0.4}
+        />
       );
     }
 
-    // Straight connection within same track
-    return (
-      <g key={`edge-${i}`}>
-        <line x1={x1} y1={y1} x2={x2} y2={y2}
-          stroke={color} strokeWidth={strokeWidth} opacity={opacity}
-          strokeDasharray={dashArray} />
-      </g>
-    );
+    // Dots on nodes — 16px diameter (8px radius), white 3px stroke
+    for (const node of nodes) {
+      const dotX = CENTER_X + node.track * TRACK_W;
+      const dotY = node.y + NODE_H / 2;
+      const platform = node.log.platform;
+      const colors = PLATFORM_COLORS[platform] || PLATFORM_COLORS.manual;
+
+      dots.push(
+        <circle
+          key={`dot-${node.id}`}
+          cx={dotX}
+          cy={dotY}
+          r={DOT_RADIUS}
+          fill={colors.badge}
+          stroke="#ffffff"
+          strokeWidth={3}
+          style={{ cursor: 'pointer' }}
+          onClick={() => setSelectedNode(node.id === selectedNode?.id ? null : node)}
+        />
+      );
+    }
+
+    return [lines, dots];
   }
 
-  function renderNode(node: FlowNode) {
-    const colors = PLATFORM_COLORS[node.log.platform] || PLATFORM_COLORS.manual;
-    const stageConf = STAGE_CONFIG[node.stage];
-    const isSelected = selectedNode?.id === node.id;
-    const truncated = (node.log.content || '').substring(0, 70) + ((node.log.content?.length || 0) > 70 ? '...' : '');
-    const time = new Date(node.log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const stageLabel = node.stage.charAt(0).toUpperCase() + node.stage.slice(1);
+  // Render HTML cards positioned alongside the flow
+  function renderCards() {
+    return nodes.map((node) => {
+      const colors = PLATFORM_COLORS[node.log.platform] || PLATFORM_COLORS.manual;
+      const stageConf = STAGE_CONFIG[node.stage];
+      const isSelected = selectedNode?.id === node.id;
+      const contentPreview = (node.log.content || '').substring(0, 60);
+      const time = new Date(node.log.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const stageLabel = node.stage.charAt(0).toUpperCase() + node.stage.slice(1);
 
-    // Node dot on the track line
-    const dotX = node.x + NODE_W / 2;
-    const dotY = node.y + NODE_H / 2;
+      // Cards positioned right of main branch, alternating left/right for side branches
+      let cardLeft: number;
+      if (node.track === 0) {
+        // Main branch: card to the right of the dot
+        cardLeft = CENTER_X + DOT_RADIUS + 20;
+      } else if (node.track > 0) {
+        // Right branches: card to the right
+        cardLeft = CENTER_X + node.track * TRACK_W + DOT_RADIUS + 20;
+      } else {
+        // Left branches: card to the left
+        cardLeft = CENTER_X + node.track * TRACK_W - DOT_RADIUS - 20 - NODE_W;
+      }
 
-    return (
-      <g
-        key={node.id}
-        className="flow-node"
-        style={{ cursor: 'pointer' }}
-        onClick={() => setSelectedNode(isSelected ? null : node)}
-      >
-        {/* Track dot — the "node" on the branch line */}
-        <circle cx={node.x + (node.track >= 0 ? 0 : NODE_W)} cy={node.y + NODE_H / 2}
-          r={6} fill={colors.line} stroke="#fff" strokeWidth={2} />
+      return (
+        <div
+          key={`card-${node.id}`}
+          style={{
+            position: 'absolute',
+            top: node.y,
+            left: cardLeft,
+            width: NODE_W,
+            background: isSelected ? stageConf.bg : '#ffffff',
+            borderRadius: 12,
+            border: `1px solid ${isSelected ? stageConf.color : '#e2e8f0'}`,
+            boxShadow: isSelected ? `0 4px 12px ${stageConf.color}20` : '0 1px 3px rgba(0,0,0,0.08)',
+            cursor: 'pointer',
+            overflow: 'hidden',
+            transition: 'all 0.2s',
+          }}
+          onClick={() => setSelectedNode(node.id === selectedNode?.id ? null : node)}
+        >
+          {/* Left color accent bar */}
+          <div style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 4,
+            background: colors.badge,
+          }} />
 
-        {/* Card shadow */}
-        <rect x={node.x + 1} y={node.y + 1} width={NODE_W} height={NODE_H}
-          rx={12} fill="rgba(0,0,0,0.04)" />
-        {/* Card body */}
-        <rect x={node.x} y={node.y} width={NODE_W} height={NODE_H}
-          rx={12}
-          fill={isSelected ? stageConf.bg : '#ffffff'}
-          stroke={isSelected ? stageConf.color : '#e2e8f0'}
-          strokeWidth={isSelected ? 2.5 : 1}
-        />
+          {/* Card content */}
+          <div style={{ padding: '12px 12px 12px 12px' }}>
+            {/* Top row: badges */}
+            <div style={{
+              display: 'flex',
+              gap: 6,
+              marginBottom: 8,
+              flexWrap: 'wrap',
+              fontSize: 9,
+              fontWeight: 700,
+              lineHeight: '16px',
+            }}>
+              <span style={{
+                background: colors.bg,
+                color: colors.text,
+                padding: '2px 6px',
+                borderRadius: 4,
+                textTransform: 'uppercase',
+              }}>
+                {node.log.platform}
+              </span>
+              <span style={{
+                background: stageConf.bg,
+                color: stageConf.color,
+                padding: '2px 6px',
+                borderRadius: 4,
+              }}>
+                {stageConf.emoji} {stageLabel}
+              </span>
+              <span style={{
+                marginLeft: 'auto',
+                color: '#94a3b8',
+                fontSize: 8,
+              }}>
+                {time}
+              </span>
+            </div>
 
-        {/* Left accent */}
-        <rect x={node.x} y={node.y + 8} width={3} height={NODE_H - 16}
-          rx={2} fill={stageConf.color} />
+            {/* Content preview */}
+            <div style={{
+              fontSize: 11,
+              lineHeight: 1.4,
+              color: '#334155',
+              marginBottom: 8,
+              minHeight: 16,
+              wordWrap: 'break-word',
+            }}>
+              {contentPreview}
+              {contentPreview.length === 60 && '...'}
+            </div>
 
-        {/* Row 1: Platform + Stage + Time */}
-        <rect x={node.x + 12} y={node.y + 8} width={node.log.platform.length * 6.2 + 12} height={14}
-          rx={3} fill={colors.bg} />
-        <text x={node.x + 18} y={node.y + 18} fontSize={8} fontWeight={700} fill={colors.text}
-          fontFamily="Inter, -apple-system, sans-serif" style={{ textTransform: 'uppercase' } as any}>
-          {node.log.platform}
-        </text>
-
-        <rect x={node.x + 12 + node.log.platform.length * 6.2 + 16} y={node.y + 8}
-          width={stageLabel.length * 5.5 + 22} height={14} rx={3} fill={stageConf.bg} />
-        <text x={node.x + 12 + node.log.platform.length * 6.2 + 22} y={node.y + 18}
-          fontSize={8} fontWeight={700} fill={stageConf.color}
-          fontFamily="Inter, -apple-system, sans-serif">
-          {stageConf.emoji} {stageLabel}
-        </text>
-
-        <text x={node.x + NODE_W - 10} y={node.y + 18} fontSize={8} fill="#94a3b8" textAnchor="end"
-          fontFamily="Inter, -apple-system, sans-serif">{time}</text>
-
-        {/* Row 2: Content */}
-        <text x={node.x + 12} y={node.y + 38} fontSize={11} fill="#334155"
-          fontFamily="Inter, -apple-system, sans-serif">
-          {truncated.substring(0, 42)}
-        </text>
-        {truncated.length > 42 && (
-          <text x={node.x + 12} y={node.y + 52} fontSize={10} fill="#94a3b8"
-            fontFamily="Inter, -apple-system, sans-serif">
-            {truncated.substring(42, 78)}
-          </text>
-        )}
-
-        {/* Row 3: Model + USCO */}
-        {node.log.model && (
-          <text x={node.x + 12} y={node.y + NODE_H - 6} fontSize={8} fill="#cbd5e1"
-            fontFamily="Inter, -apple-system, sans-serif">{node.log.model}</text>
-        )}
-        {stageConf.usco && (
-          <text x={node.x + NODE_W - 10} y={node.y + NODE_H - 6} fontSize={7} fill="#e2e8f0"
-            textAnchor="end" fontFamily="Inter, -apple-system, sans-serif">
-            USCO: {stageConf.usco}
-          </text>
-        )}
-      </g>
-    );
+            {/* Model label */}
+            {node.log.model && (
+              <div style={{
+                fontSize: 8,
+                color: '#94a3b8',
+              }}>
+                {node.log.model}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    });
   }
 
   // ── Detail panel ──────────────────────────────────────────────
@@ -592,7 +670,7 @@ export default function FlowPage() {
   }
 
   return (
-    <div style={{ height: '100vh', width: '100vw', overflow: 'hidden', background: '#fafbfc',
+    <div style={{ height: '100vh', width: '100vw', overflow: 'hidden', background: '#f8fafc',
       fontFamily: 'Inter, -apple-system, sans-serif' }}>
 
       {/* Top bar */}
@@ -690,6 +768,7 @@ export default function FlowPage() {
         ref={containerRef}
         style={{
           marginTop: 52, height: 'calc(100vh - 52px)', overflow: 'hidden',
+          background: '#f8fafc',
           cursor: dragging ? 'grabbing' : 'grab',
         }}
         onMouseDown={handleMouseDown}
@@ -708,24 +787,46 @@ export default function FlowPage() {
             <p style={{ fontSize: 13 }}>Capture AI interactions to see your copyrightability chain grow.</p>
           </div>
         ) : (
-          <svg
-            ref={svgRef}
-            width={maxX + 100}
-            height={maxY + 100}
+          <div
             style={{
-              transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-              transformOrigin: '0 0',
+              position: 'relative',
+              width: '100%',
+              height: '100%',
+              overflow: 'auto',
             }}
           >
-            {/* Track backbone lines */}
-            {renderTrackLines()}
+            {/* SVG layer for lines and dots */}
+            <svg
+              ref={svgRef}
+              width={maxX + 100}
+              height={maxY + 100}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                pointerEvents: 'none',
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: '0 0',
+              }}
+            >
+              {renderSVGLayer()}
+            </svg>
 
-            {/* Edges */}
-            {edges.map((e, i) => renderEdge(e, i))}
-
-            {/* Nodes */}
-            {nodes.map(renderNode)}
-          </svg>
+            {/* HTML layer for cards */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: maxX + 100,
+                height: maxY + 100,
+                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                transformOrigin: '0 0',
+              }}
+            >
+              {renderCards()}
+            </div>
+          </div>
         )}
       </div>
 
