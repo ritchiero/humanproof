@@ -76,7 +76,7 @@ export default function Dashboard() {
 
     // Live mode: read from /api/logs (synced by extension)
     // Try auth for user info, but don't require it
-    auth.onAuthStateChanged((u) => { if (u) setUser(u); });
+    if (auth) auth.onAuthStateChanged((u) => { if (u) setUser(u); });
 
     // Initial fetch
     fetchLiveLogs().then(() => setLoading(false));

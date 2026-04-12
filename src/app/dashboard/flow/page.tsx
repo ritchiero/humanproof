@@ -136,6 +136,7 @@ export default function FlowPage() {
         }
       })
       .catch(() => {
+        if (!auth) { setLoading(false); return; }
         const unsub = auth.onAuthStateChanged(async (u) => {
           if (!u) { router.push('/'); return; }
           try {

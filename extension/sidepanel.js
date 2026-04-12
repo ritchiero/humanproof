@@ -8,16 +8,26 @@ let projects = []; // AI-detected projects: { name, logIds, startedAt, platforms
 let selectedProjectIdx = null; // For report tab
 
 const STAGE_DISPLAY = {
-  'ideación':     { emoji: '💡', label: 'Ideación' },
-  'dirección':    { emoji: '🎯', label: 'Dirección' },
-  'exploración':  { emoji: '🔍', label: 'Exploración' },
-  'selección':    { emoji: '✓',  label: 'Selección' },
-  'edición':      { emoji: '✏️', label: 'Edición' },
-  'corrección':   { emoji: '🔧', label: 'Corrección' },
-  'combinación':  { emoji: '🧩', label: 'Combinación' },
-  'refinamiento': { emoji: '✨', label: 'Refinamiento' },
-  'validación':   { emoji: '✅', label: 'Validación' },
-  'respuesta':    { emoji: '🤖', label: 'Respuesta' },
+  'ideation':      { color: '#7c3aed', bg: '#f5f3ff', label: 'Ideation' },
+  'direction':     { color: '#2563eb', bg: '#eff6ff', label: 'Direction' },
+  'generation':    { color: '#059669', bg: '#ecfdf5', label: 'Generation' },
+  'iteration':     { color: '#0891b2', bg: '#ecfeff', label: 'Iteration' },
+  'selection':     { color: '#d97706', bg: '#fffbeb', label: 'Selection' },
+  'refinement':    { color: '#dc2626', bg: '#fef2f2', label: 'Refinement' },
+  'revision':      { color: '#be185d', bg: '#fdf2f8', label: 'Revision' },
+  'combination':   { color: '#7c3aed', bg: '#faf5ff', label: 'Combination' },
+  'final_review':  { color: '#16a34a', bg: '#f0fdf4', label: 'Final Review' },
+  // Legacy Spanish keys (from old AI classifier)
+  'ideación':      { color: '#7c3aed', bg: '#f5f3ff', label: 'Ideation' },
+  'dirección':     { color: '#2563eb', bg: '#eff6ff', label: 'Direction' },
+  'exploración':   { color: '#0891b2', bg: '#ecfeff', label: 'Exploration' },
+  'selección':     { color: '#d97706', bg: '#fffbeb', label: 'Selection' },
+  'edición':       { color: '#dc2626', bg: '#fef2f2', label: 'Edition' },
+  'corrección':    { color: '#be185d', bg: '#fdf2f8', label: 'Correction' },
+  'combinación':   { color: '#7c3aed', bg: '#faf5ff', label: 'Combination' },
+  'refinamiento':  { color: '#0891b2', bg: '#ecfeff', label: 'Refinement' },
+  'validación':    { color: '#16a34a', bg: '#f0fdf4', label: 'Validation' },
+  'respuesta':     { color: '#059669', bg: '#ecfdf5', label: 'Response' },
 };
 
 const TYPE_DISPLAY = {
@@ -244,25 +254,33 @@ function renderLogs(content) {
           </div>
         </div>
         <div class="session-logs" id="session_${sIdx}" style="display:${sIdx === 0 ? 'block' : 'none'}">
-          ${session.logs.map((log) => {
-            const stg = stages[log.id];
+          ${session.logs.map((log, logIdx) => {
+            const stg = log.stage || stages[log.id]; // prefer inline stage, fallback to AI-classified
             const stgInfo = stg ? STAGE_DISPLAY[stg] : null;
             const typeInfo = TYPE_DISPLAY[log.type] || { icon: '•', label: log.type };
             return `
-            <div class="log-entry log-type-${log.type}">
-              <div class="meta">
-                <span class="type-pill type-pill-${log.type}"><span class="type-icon">${typeInfo.icon}</span> ${typeInfo.label}</span>
-                ${stgInfo ? `<span class="stage-badge">${stgInfo.emoji} ${stgInfo.label}</span>` : ''}
-                <span class="meta-time">${formatTime(log.timestamp)}</span>
-                ${log.model ? `<span class="meta-model">${log.model}</span>` : ''}
+            <div class="log-entry" data-log-id="${log.id}" data-type="${log.type}">
+              <span class="log-badge">${logIdx + 1}</span>
+              <div class="log-content-col">
+                <div class="log-header">
+                  <div class="log-header-left">
+                    <span class="type-pill type-pill-${log.type}">${typeInfo.label}</span>
+                    ${stgInfo ? `<span class="stage-badge" style="background:${stgInfo.bg};color:${stgInfo.color};">${stgInfo.label}</span>` : ''}
+                  </div>
+                  <span class="meta-time">${formatTime(log.timestamp)}</span>
+                </div>
+                <div class="text">${truncate(log.content)}</div>
+                <div class="log-footer">
+                  ${log.model ? `<span class="meta-model">${log.model}</span>` : ''}
+                  ${log.hash ? `<span class="hash-badge" title="Chain hash: ${log.hash}\nPrevious: ${log.previousHash || 'genesis'}">#${log.chainIndex ?? '?'} ${log.hash.substring(0, 8)}…</span>` : ''}
+                  ${log.conversationUrl ? `<a href="${log.conversationUrl}" target="_blank" class="conv-link">${log.conversationId ? `ID: ${log.conversationId.substring(0, 12)}...` : 'Open'}</a>` : ''}
+                </div>
+                ${log.hasScreenshot ? `
+                  <div class="screenshot-frame" data-log-id="${log.id}">
+                    <img id="thumb_${log.id}" class="screenshot-thumb" data-log-id="${log.id}" src="${screenshotCache[log.id] || ''}" style="display:${screenshotCache[log.id] ? 'block' : 'none'}" title="Click to enlarge" />
+                    <div class="screenshot-loading" id="sload_${log.id}" style="display:${screenshotCache[log.id] ? 'none' : 'flex'}">📷 Loading capture...</div>
+                  </div>` : ''}
               </div>
-              <div class="text">${truncate(log.content)}</div>
-              ${log.conversationUrl ? `<a href="${log.conversationUrl}" target="_blank" class="conv-link">${log.conversationId ? `ID: ${log.conversationId.substring(0, 12)}...` : 'Open conversation'}</a>` : ''}
-              ${log.hasScreenshot ? `
-                <div class="screenshot-frame" data-log-id="${log.id}">
-                  <img id="thumb_${log.id}" class="screenshot-thumb" data-log-id="${log.id}" src="${screenshotCache[log.id] || ''}" style="display:${screenshotCache[log.id] ? 'block' : 'none'}" title="Click to enlarge" />
-                  <div class="screenshot-loading" id="sload_${log.id}" style="display:${screenshotCache[log.id] ? 'none' : 'flex'}">📷 Loading capture...</div>
-                </div>` : ''}
             </div>`;
           }).join('')}
         </div>
@@ -459,34 +477,130 @@ async function detectProjects() {
 // ── Report Tab ────────────────────────────────────────────────────
 
 function renderReport(content) {
-  if (projects.length === 0) {
-    content.innerHTML = `
-      <div class="empty-state">
-        <h3>No projects detected yet</h3>
-        <p>Go to the Projects tab and click "Detect Projects" first.</p>
-      </div>
-    `;
-    return;
-  }
-
+  // Report tab now shows chain verification first, then project report
   content.innerHTML = `
-    <div style="margin-bottom:12px;">
-      <label style="font-size:12px; font-weight:600; color:#374151;">Select a project:</label>
-      <select id="projectSelect" style="width:100%; margin-top:4px; padding:8px; border:1px solid #e5e7eb; border-radius:6px; font-size:13px;">
-        ${projects.map((p, i) => `<option value="${i}" ${selectedProjectIdx === i ? 'selected' : ''}>${p.name}</option>`).join('')}
-      </select>
+    <div id="chainVerification" style="margin-bottom:16px;">
+      <div class="chain-status valid" style="opacity:0.6;">
+        <span class="chain-icon">⏳</span>
+        <div class="chain-info">
+          <div class="chain-title">Verifying chain integrity...</div>
+        </div>
+      </div>
     </div>
-    <button class="btn btn-primary" id="generateBtn">Generate Evidence Report</button>
-    <div id="reportStatus" style="margin-top:8px; font-size:11px; color:#6b7280;"></div>
-    <div id="reportPreview" style="margin-top:12px;"></div>
+
+    <div id="chainDetails" style="margin-bottom:16px;"></div>
+
+    ${projects.length > 0 ? `
+      <div style="margin-bottom:12px;">
+        <label style="font-size:13px; font-weight:600; color:#1a1a2e;">Select a project:</label>
+        <select id="projectSelect" style="width:100%; margin-top:4px; padding:9px 10px; border:1px solid #eef0f4; border-radius:10px; font-size:13px; background:#fff;">
+          ${projects.map((p, i) => `<option value="${i}" ${selectedProjectIdx === i ? 'selected' : ''}>${p.name}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn btn-primary" id="generateBtn">Generate Evidence Report</button>
+      <div id="reportStatus" style="margin-top:8px; font-size:11px; color:#6b7280;"></div>
+      <div id="reportPreview" style="margin-top:12px;"></div>
+    ` : `
+      <div class="empty-state" style="padding:24px 16px;">
+        <h3>Evidence report</h3>
+        <p>Capture more interactions and detect projects to generate a full copyright evidence report.</p>
+      </div>
+    `}
   `;
 
-  document.getElementById('projectSelect')?.addEventListener('change', (e) => {
-    selectedProjectIdx = parseInt(e.target.value);
-  });
-  if (selectedProjectIdx === null) selectedProjectIdx = 0;
+  // Run chain verification
+  chrome.runtime.sendMessage({ type: 'VERIFY_CHAIN' }, (result) => {
+    const el = document.getElementById('chainVerification');
+    if (!result) {
+      el.innerHTML = `
+        <div class="chain-status invalid">
+          <span class="chain-icon">⚠️</span>
+          <div class="chain-info">
+            <div class="chain-title">No chain data</div>
+            <div class="chain-detail">Start capturing interactions to build your evidence chain.</div>
+          </div>
+        </div>`;
+      return;
+    }
 
-  document.getElementById('generateBtn')?.addEventListener('click', generateReport);
+    if (result.valid) {
+      el.innerHTML = `
+        <div class="chain-status valid">
+          <span class="chain-icon">✅</span>
+          <div class="chain-info">
+            <div class="chain-title">Chain integrity verified</div>
+            <div class="chain-detail">${result.length} blocks · All hashes valid · No tampering detected</div>
+          </div>
+        </div>`;
+    } else {
+      el.innerHTML = `
+        <div class="chain-status invalid">
+          <span class="chain-icon">❌</span>
+          <div class="chain-info">
+            <div class="chain-title">Chain integrity broken</div>
+            <div class="chain-detail">Break at block #${result.brokenAt}: ${result.reason}</div>
+          </div>
+        </div>`;
+    }
+  });
+
+  // Load chain details
+  chrome.runtime.sendMessage({ type: 'GET_CHAIN' }, (result) => {
+    const el = document.getElementById('chainDetails');
+    const chain = result?.chain || [];
+    if (chain.length === 0) {
+      el.innerHTML = '';
+      return;
+    }
+
+    const latest = chain[chain.length - 1];
+    const first = chain[0];
+    const platforms = [...new Set(chain.map(c => c.platform))];
+    const types = {};
+    chain.forEach(c => { types[c.type] = (types[c.type] || 0) + 1; });
+
+    el.innerHTML = `
+      <div style="background:#fff; border:1px solid #eef0f4; border-radius:14px; padding:16px;">
+        <div style="font-size:13px; font-weight:600; color:#1a1a2e; margin-bottom:10px;">Custody Chain Summary</div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:12px;">
+          <div style="background:#f7f8fa; padding:10px; border-radius:8px;">
+            <div style="font-size:18px; font-weight:700; color:#1a1a2e;">${chain.length}</div>
+            <div style="font-size:10px; color:#9ca3b4; text-transform:uppercase; font-weight:600;">Blocks</div>
+          </div>
+          <div style="background:#f7f8fa; padding:10px; border-radius:8px;">
+            <div style="font-size:18px; font-weight:700; color:#1a1a2e;">${platforms.length}</div>
+            <div style="font-size:10px; color:#9ca3b4; text-transform:uppercase; font-weight:600;">Platforms</div>
+          </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <div style="font-size:10px; color:#9ca3b4; text-transform:uppercase; font-weight:600; margin-bottom:4px;">Interaction Breakdown</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            ${Object.entries(types).map(([t, count]) => `<span class="type-pill type-pill-${t}">${t}: ${count}</span>`).join('')}
+          </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <div style="font-size:10px; color:#9ca3b4; text-transform:uppercase; font-weight:600; margin-bottom:4px;">Genesis Hash</div>
+          <div class="chain-hash-mono">${first.previousHash}</div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <div style="font-size:10px; color:#9ca3b4; text-transform:uppercase; font-weight:600; margin-bottom:4px;">Latest Hash</div>
+          <div class="chain-hash-mono">${latest.hash}</div>
+        </div>
+        <div>
+          <div style="font-size:10px; color:#9ca3b4; text-transform:uppercase; font-weight:600; margin-bottom:4px;">Time Range</div>
+          <div style="font-size:12px; color:#4b5563;">${new Date(first.timestamp).toLocaleString()} → ${new Date(latest.timestamp).toLocaleString()}</div>
+        </div>
+      </div>
+    `;
+  });
+
+  if (projects.length > 0) {
+    document.getElementById('projectSelect')?.addEventListener('change', (e) => {
+      selectedProjectIdx = parseInt(e.target.value);
+    });
+    if (selectedProjectIdx === null) selectedProjectIdx = 0;
+    document.getElementById('generateBtn')?.addEventListener('click', generateReport);
+  }
 }
 
 async function generateReport() {

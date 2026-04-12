@@ -10,6 +10,7 @@ export default function Home() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!auth) { setLoading(false); return; }
     const unsub = auth.onAuthStateChanged((user) => {
       if (user) router.push('/dashboard');
       setLoading(false);
@@ -18,6 +19,7 @@ export default function Home() {
   }, [router]);
 
   const handleLogin = async () => {
+    if (!auth || !googleProvider) return;
     try {
       await signInWithPopup(auth, googleProvider);
       router.push('/dashboard');

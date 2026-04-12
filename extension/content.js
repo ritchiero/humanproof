@@ -23,35 +23,44 @@
 
   if (!platform) return;
 
-  // Check if this platform is enabled
-  chrome.storage.local.get(['hp_platforms', 'hp_capture_enabled'], (result) => {
-    if (result.hp_capture_enabled === false) return; // global capture off
-    const platforms = result.hp_platforms || {};
-    if (platforms[platform] === false) {
-      console.log(`[HumanProof] Platform ${platform} is disabled, skipping capture.`);
-      return;
-    }
-    initPlatform();
-  });
-
   console.log(`[HumanProof] Active on platform: ${platform}`);
 
   // ── Helpers ─────────────────────────────────────────────────────
 
   function sendLog(data) {
+    const payload = {
+      type: 'CAPTURE_LOG',
+      data: {
+        platform,
+        conversationUrl: window.location.href,
+        conversationId: extractConversationId(),
+        ...data,
+      },
+    };
+
     try {
-      chrome.runtime.sendMessage({
-        type: 'CAPTURE_LOG',
-        data: {
-          platform,
-          conversationUrl: window.location.href,
-          conversationId: extractConversationId(),
-          ...data,
-        },
+      chrome.runtime.sendMessage(payload, (response) => {
+        // Check for disconnection error
+        if (chrome.runtime.lastError) {
+          const errMsg = chrome.runtime.lastError.message || '';
+          console.warn('[HumanProof] sendLog error:', errMsg);
+          // If extension context invalidated or disconnected, retry once after short delay
+          if (errMsg.includes('context invalidated') || errMsg.includes('Receiving end does not exist')) {
+            console.log('[HumanProof] Retrying sendLog after service worker restart...');
+            setTimeout(() => {
+              try {
+                chrome.runtime.sendMessage(payload);
+              } catch (retryErr) {
+                console.warn('[HumanProof] Retry failed:', retryErr.message);
+              }
+            }, 500);
+          }
+          return;
+        }
+        console.log(`[HumanProof] Log sent: ${data.type} — ${(data.content || '').substring(0, 60)}...`);
       });
-      console.log(`[HumanProof] Log sent: ${data.type} — ${(data.content || '').substring(0, 60)}...`);
     } catch (err) {
-      console.warn('[HumanProof] sendLog error:', err.message);
+      console.warn('[HumanProof] sendLog exception:', err.message);
     }
   }
 
@@ -74,26 +83,54 @@
     let capturedTexts = new Set(); // dedup by content hash
 
     function hashText(t) {
-      return (t || '').substring(0, 100).trim();
+      // Use length + first 200 chars for more robust dedup
+      const s = (t || '').trim();
+      return `${s.length}:${s.substring(0, 200)}`;
     }
 
     // ── METHOD 1: Capture prompts via textarea/input interception ──
     // Listen for Enter key or send button to grab the prompt text
+    // Helper: get the real ChatGPT input element (ProseMirror div, NOT the hidden fallback textarea)
+    function getPromptInput() {
+      // Prioritize the ProseMirror contenteditable div (the real input)
+      const proseMirror = document.querySelector('#prompt-textarea[contenteditable="true"]');
+      if (proseMirror) return proseMirror;
+      // Fallback: any contenteditable div
+      const ce = document.querySelector('div[contenteditable="true"]');
+      if (ce) return ce;
+      // Last resort: visible textarea (skip hidden ones)
+      const textareas = document.querySelectorAll('textarea');
+      for (const ta of textareas) {
+        if (ta.offsetHeight > 0 && ta.offsetWidth > 0) return ta;
+      }
+      return null;
+    }
+
+    function getInputText(el) {
+      if (!el) return '';
+      // For contenteditable divs, use innerText; for textareas, use .value
+      if (el.tagName === 'TEXTAREA' || el.tagName === 'INPUT') {
+        return (el.value || '').trim();
+      }
+      return (el.innerText || el.textContent || '').trim();
+    }
+
+    function capturePrompt(text) {
+      const hash = hashText(text);
+      if (capturedTexts.has(hash)) return; // already captured by another method
+      capturedTexts.add(hash);
+      lastPromptText = text;
+      setTimeout(() => {
+        sendLog({ type: 'prompt', content: text, model: detectChatGPTModel() });
+      }, 100);
+    }
+
     function capturePromptOnSend() {
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
-          // Find the active textarea or contenteditable
-          const textarea = document.querySelector('textarea, [contenteditable="true"]#prompt-textarea, div[contenteditable="true"][data-placeholder]');
-          if (textarea) {
-            const text = (textarea.value || textarea.innerText || '').trim();
-            if (text && text !== lastPromptText && text.length > 1) {
-              lastPromptText = text;
-              // Small delay to ensure it's actually being sent (not just editing)
-              setTimeout(() => {
-                sendLog({ type: 'prompt', content: text, model: detectChatGPTModel() });
-              }, 100);
-            }
-          }
+          const input = getPromptInput();
+          const text = getInputText(input);
+          if (text && text.length > 1) capturePrompt(text);
         }
       }, true);
 
@@ -101,16 +138,9 @@
       document.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-testid="send-button"], button[aria-label="Send prompt"], button[aria-label*="Send"], button[data-testid="fruitjuice-send-button"]');
         if (btn) {
-          const textarea = document.querySelector('textarea, [contenteditable="true"]#prompt-textarea, div[contenteditable="true"][data-placeholder]');
-          if (textarea) {
-            const text = (textarea.value || textarea.innerText || '').trim();
-            if (text && text !== lastPromptText && text.length > 1) {
-              lastPromptText = text;
-              setTimeout(() => {
-                sendLog({ type: 'prompt', content: text, model: detectChatGPTModel() });
-              }, 100);
-            }
-          }
+          const input = getPromptInput();
+          const text = getInputText(input);
+          if (text && text.length > 1) capturePrompt(text);
         }
       }, true);
     }
@@ -209,9 +239,9 @@
       // Intercept edit submissions: when in edit mode, the prompt is a region edit
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey && isInEditMode) {
-          const textarea = document.querySelector('textarea, [contenteditable="true"]#prompt-textarea, div[contenteditable="true"]');
-          if (textarea) {
-            const text = (textarea.value || textarea.innerText || '').trim();
+          const input = getPromptInput();
+          const text = getInputText(input);
+          if (input) {
             if (text && text.length > 1) {
               sendLog({
                 type: 'prompt',
@@ -340,7 +370,8 @@
 
   function initClaudeCapture() {
     let lastPrompt = '';
-    const capturedTexts = new Set();
+    const capturedTexts = new Set();      // full content hashes for dedup
+    let lastResponseTexts = new Map();    // element → last captured text length (detect streaming completion)
 
     // Prompt via textarea interception
     document.addEventListener('keydown', (e) => {
@@ -358,20 +389,46 @@
       }
     }, true);
 
-    // Response scanner
+    // Also capture via send button click
+    document.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[aria-label="Send Message"], button[aria-label*="Send"]');
+      if (btn) {
+        const textarea = document.querySelector('[contenteditable="true"], textarea');
+        if (textarea) {
+          const text = (textarea.value || textarea.innerText || '').trim();
+          if (text && text !== lastPrompt && text.length > 1) {
+            lastPrompt = text;
+            setTimeout(() => {
+              sendLog({ type: 'prompt', content: text, model: detectClaudeModel() });
+            }, 100);
+          }
+        }
+      }
+    }, true);
+
+    // Response scanner — only capture COMPLETED responses (not streaming)
     setInterval(() => {
-      const turns = document.querySelectorAll('[data-is-streaming="false"], [class*="response"], [class*="assistant"]');
-      turns.forEach((turn) => {
+      // Only capture responses that are NOT currently streaming
+      const completedTurns = document.querySelectorAll('[data-is-streaming="false"]');
+      completedTurns.forEach((turn) => {
         const text = turn.innerText?.trim();
         if (!text || text.length < 10) return;
-        const hash = text.substring(0, 100);
-        if (capturedTexts.has(hash)) return;
-        capturedTexts.add(hash);
+
+        // Use a longer hash for better dedup (first 200 chars + length)
+        const dedup = `${text.length}:${text.substring(0, 200)}`;
+        if (capturedTexts.has(dedup)) return;
+
+        // Check if this element was previously seen at a shorter length (was streaming)
+        const prevLen = lastResponseTexts.get(turn);
+        if (prevLen && Math.abs(prevLen - text.length) < 20) return; // same content, skip
+
+        capturedTexts.add(dedup);
+        lastResponseTexts.set(turn, text.length);
         sendLog({ type: 'response', content: text, model: detectClaudeModel() });
       });
-    }, 3000);
+    }, 4000); // Slightly slower to ensure streaming is complete
 
-    // Backup MutationObserver
+    // Backup MutationObserver for prompts
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
@@ -379,8 +436,9 @@
           const humanTurn = node.querySelector?.('[data-is-human-turn="true"]');
           if (humanTurn) {
             const text = humanTurn.innerText?.trim();
-            if (text && text !== lastPrompt && !capturedTexts.has(text.substring(0, 100))) {
-              capturedTexts.add(text.substring(0, 100));
+            const dedup = `${(text||'').length}:${(text||'').substring(0, 200)}`;
+            if (text && text !== lastPrompt && !capturedTexts.has(dedup)) {
+              capturedTexts.add(dedup);
               lastPrompt = text;
               sendLog({ type: 'prompt', content: text, model: detectClaudeModel() });
             }
@@ -389,6 +447,8 @@
       }
     });
     observer.observe(document.body, { childList: true, subtree: true });
+
+    console.log('[HumanProof] Claude capture initialized');
   }
 
   function detectClaudeModel() {
@@ -527,15 +587,14 @@
 
   // ── Initialize ─────────────────────────────────────────────────
 
-  function initPlatform() {
-    switch (platform) {
-      case 'chatgpt': initChatGPTCapture(); break;
-      case 'claude': initClaudeCapture(); break;
-      case 'midjourney': initMidjourneyCapture(); break;
-      case 'gemini': initGeminiCapture(); break;
-      case 'grok': initGrokCapture(); break;
-      case 'figma': initFigmaCapture(); break;
-    }
-    chrome.runtime.sendMessage({ type: 'DETECT_PLATFORM' });
+  // Initialize capture directly — background.js handles permission checks
+  switch (platform) {
+    case 'chatgpt': initChatGPTCapture(); break;
+    case 'claude': initClaudeCapture(); break;
+    case 'midjourney': initMidjourneyCapture(); break;
+    case 'gemini': initGeminiCapture(); break;
+    case 'grok': initGrokCapture(); break;
+    case 'figma': initFigmaCapture(); break;
   }
+  chrome.runtime.sendMessage({ type: 'DETECT_PLATFORM' });
 })();
