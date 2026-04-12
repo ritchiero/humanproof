@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'firebase/auth';
-import { getProjectsByUser, getLogsByUser } from '@/lib/firestore';
+import { getProjectsByUser, getLogsByUser, saveLog, createProject } from '@/lib/firestore';
 import type { Project, CaptureLog } from '@/types';
 
 // ── Colors ──────────────────────────────────────────────────────
@@ -33,6 +33,7 @@ interface DemoProject {
 
 export default function Dashboard() {
   const router = useRouter();
+  const userRef = useRef<any>(null);
   const [user, setUser] = useState<any>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [logs, setLogs] = useState<CaptureLog[]>([]);
@@ -47,8 +48,38 @@ export default function Dashboard() {
     try {
       const resp = await fetch('/api/logs');
       const data = await resp.json();
-      if (data.logs) setLogs(data.logs);
-      if (data.projects) setDemoProjects(data.projects);
+
+      if (data.logs) {
+        setLogs((prev) => {
+          const existing = new Map(prev.map((l) => [l.id, l]));
+          for (const log of data.logs) {
+            if (!existing.has(log.id)) {
+              existing.set(log.id, log);
+              // Persist to Firestore if user is authenticated
+              if (userRef.current) {
+                saveLog({ ...log, userId: userRef.current.uid }).catch(() => {});
+              }
+            }
+          }
+          return Array.from(existing.values());
+        });
+      }
+
+      if (data.projects && userRef.current) {
+        for (const p of data.projects) {
+          const project: Project = {
+            id: p.id || crypto.randomUUID(),
+            userId: userRef.current.uid,
+            name: p.name,
+            description: p.description,
+            status: 'active',
+            platforms: p.platforms || [],
+            createdAt: p.startedAt || new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          createProject(project).catch(() => {});
+        }
+      }
     } catch (err) {
       console.error('Failed to fetch logs:', err);
     }
@@ -75,8 +106,27 @@ export default function Dashboard() {
     }
 
     // Live mode: read from /api/logs (synced by extension)
-    // Try auth for user info, but don't require it
-    if (auth) auth.onAuthStateChanged((u) => { if (u) setUser(u); });
+    // Try auth for user info + Firestore persistence
+    if (auth) {
+      auth.onAuthStateChanged(async (u) => {
+        if (u) {
+          userRef.current = u;
+          setUser(u);
+          // Load persisted data from Firestore
+          try {
+            const [firestoreLogs, firestoreProjects] = await Promise.all([
+              getLogsByUser(u.uid),
+              getProjectsByUser(u.uid),
+            ]);
+            // Set initial data from Firestore
+            if (firestoreLogs.length > 0) setLogs(firestoreLogs);
+            if (firestoreProjects.length > 0) setProjects(firestoreProjects);
+          } catch (err) {
+            console.error('Failed to load Firestore data:', err);
+          }
+        }
+      });
+    }
 
     // Initial fetch
     fetchLiveLogs().then(() => setLoading(false));
@@ -86,7 +136,23 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [router]);
 
-  const activeProjects = isDemo ? demoProjects : projects;
+  const activeProjects = useMemo(() => {
+    if (isDemo) return demoProjects;
+    // Merge Firestore projects with auto-detected projects, deduplicate by name
+    const all = [...projects.map((p) => ({
+      name: p.name,
+      description: p.description || '',
+      logIds: [],
+      platforms: p.platforms || [],
+      startedAt: p.createdAt,
+    }))];
+    for (const dp of demoProjects) {
+      if (!all.find((a) => a.name === dp.name)) {
+        all.push(dp);
+      }
+    }
+    return all;
+  }, [isDemo, projects, demoProjects]);
 
   const { logColorMap, projectColors } = useMemo(() => {
     const map: Record<string, typeof PROJECT_PALETTE[0]> = {};
