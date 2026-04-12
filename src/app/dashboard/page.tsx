@@ -238,7 +238,7 @@ export default function Dashboard() {
         {/* Project legend */}
         {projectColors.length > 0 && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-            {projectColors.map(({ project, color }, i) => (
+            {projectColors.slice(0, 7).map(({ project, color }, i) => (
               <div key={i} style={{
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 14px', borderRadius: 20,
@@ -248,6 +248,15 @@ export default function Dashboard() {
                 {project.name}
               </div>
             ))}
+            {projectColors.length > 7 && (
+              <div style={{
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '5px 14px', borderRadius: 20,
+                background: '#f3f4f6', fontSize: 12, color: '#6b7280',
+              }}>
+                +{projectColors.length - 7} more
+              </div>
+            )}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
               padding: '5px 14px', borderRadius: 20,
