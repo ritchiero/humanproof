@@ -139,7 +139,7 @@ export default function Dashboard() {
   const activeProjects = useMemo(() => {
     if (isDemo) return demoProjects;
     // Merge Firestore projects with auto-detected projects, deduplicate by name
-    const all = [...projects.map((p) => ({
+    const all: DemoProject[] = [...projects.map((p) => ({
       name: p.name,
       description: p.description || '',
       logIds: [],
