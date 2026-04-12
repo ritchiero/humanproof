@@ -46,6 +46,102 @@ const ROW_H = 110; // vertical spacing between rows
 const TRACK_W = 320; // horizontal spacing between tracks (each track is 320px from center)
 const CENTER_X = 500; // center of the trunk
 const PADDING_TOP = 60;
+
+// ── USCO Work Type Classification ────────────────────────────────
+
+type USCOWorkType = 'literary' | 'visual' | 'audiovisual' | 'musical' | 'architectural' | 'compilation' | 'derivative';
+
+const USCO_WORK_TYPES: Record<USCOWorkType, { label: string; icon: string; description: string }> = {
+  literary:       { label: 'Literary Work', icon: '📄', description: 'Text, code, articles, scripts, documentation' },
+  visual:         { label: 'Pictorial, Graphic & Sculptural', icon: '🎨', description: 'Images, logos, illustrations, UI designs' },
+  audiovisual:    { label: 'Audiovisual Work', icon: '🎬', description: 'Videos, animations, interactive media' },
+  musical:        { label: 'Musical Work', icon: '🎵', description: 'Compositions, sound recordings, audio' },
+  architectural:  { label: 'Architectural Work', icon: '🏛️', description: 'Building designs, spatial layouts' },
+  compilation:    { label: 'Compilation', icon: '📚', description: 'Curated collection of pre-existing materials' },
+  derivative:     { label: 'Derivative Work', icon: '🔄', description: 'Transformation or adaptation of existing work' },
+};
+
+const USCO_CONTRIB_LABELS: Record<string, { label: string; color: string; description: string }> = {
+  SELECTION:        { label: 'Selection', color: '#16a34a', description: 'Choosing, accepting or rejecting AI outputs' },
+  COORDINATION:     { label: 'Coordination', color: '#0891b2', description: 'Combining outputs across platforms/sessions' },
+  ARRANGEMENT:      { label: 'Arrangement', color: '#ea580c', description: 'Ordering and structuring into a whole' },
+  MODIFICATION:     { label: 'Modification', color: '#ca8a04', description: 'Editing, iterating, and refining outputs' },
+  EXPRESSIVE_INPUT: { label: 'Expressive Input', color: '#7c3aed', description: 'Original creative direction and ideation' },
+};
+
+function classifyWorkType(logs: CaptureLog[]): { primary: USCOWorkType; secondary?: USCOWorkType; confidence: number } {
+  const allContent = logs.map(l => (l.content || '').toLowerCase()).join(' ');
+  const scores: Record<USCOWorkType, number> = {
+    literary: 0, visual: 0, audiovisual: 0, musical: 0, architectural: 0, compilation: 0, derivative: 0,
+  };
+
+  // Literary signals
+  if (allContent.match(/escrib|write|draft|redact|article|blog|post|text|paragraph|essay|report|document|contrat|contract|legal|brief|memo|email|letter|código|code|script|function|api|component/)) scores.literary += 3;
+  if (allContent.match(/```|function|const |import |class |def |return/)) scores.literary += 2;
+
+  // Visual signals
+  if (allContent.match(/logo|image|diseñ|design|ilustra|illustrat|icon|banner|poster|graphic|figma|ui |ux |layout|mockup|wireframe|color|palette|font|tipograf|brand/)) scores.visual += 3;
+  if (allContent.match(/midjourney|dall-?e|stable diffusion|imagen|generat.*image|\[image/i)) scores.visual += 4;
+
+  // Audiovisual signals
+  if (allContent.match(/video|animation|film|movie|clip|motion|render|3d|scene|camera|frame|storyboard/)) scores.audiovisual += 3;
+
+  // Musical signals
+  if (allContent.match(/music|song|melody|chord|beat|audio|sound|lyric|rhythm|compose/)) scores.musical += 3;
+
+  // Compilation signals
+  const platforms = new Set(logs.map(l => l.platform));
+  if (platforms.size >= 3) scores.compilation += 2;
+  if (allContent.match(/combin|compil|collect|gather|curate|junt|recopil/)) scores.compilation += 2;
+
+  // Derivative signals
+  if (allContent.match(/adapt|transform|translat|traduc|version|remake|rewrite|basado en|based on/)) scores.derivative += 2;
+
+  // Sort by score
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]) as [USCOWorkType, number][];
+  const primary = sorted[0];
+  const secondary = sorted[1][1] > 1 ? sorted[1] : undefined;
+  const maxScore = Math.max(...Object.values(scores));
+  const confidence = maxScore > 0 ? Math.min(95, 50 + maxScore * 8) : 30;
+
+  return { primary: primary[0], secondary: secondary?.[0], confidence };
+}
+
+function assessCopyrightability(nodes: FlowNode[]): { strength: 'strong' | 'moderate' | 'weak'; score: number; factors: string[] } {
+  const humanNodes = nodes.filter(n => n.stage !== 'respuesta');
+  const totalNodes = nodes.length;
+  const humanRatio = totalNodes > 0 ? humanNodes.length / totalNodes : 0;
+  const factors: string[] = [];
+  let score = 0;
+
+  // Factor 1: Human contribution ratio
+  if (humanRatio >= 0.4) { score += 30; factors.push('High human-to-AI interaction ratio'); }
+  else if (humanRatio >= 0.2) { score += 15; factors.push('Moderate human contribution'); }
+  else { score += 5; factors.push('Low direct human input detected'); }
+
+  // Factor 2: Diversity of creative stages
+  const uniqueStages = new Set(humanNodes.map(n => n.stage));
+  if (uniqueStages.size >= 4) { score += 25; factors.push('Diverse creative contributions (selection, arrangement, modification, expression)'); }
+  else if (uniqueStages.size >= 2) { score += 15; factors.push('Multiple types of creative contribution'); }
+  else { score += 5; }
+
+  // Factor 3: Multi-platform coordination
+  const platforms = new Set(nodes.map(n => n.log.platform));
+  if (platforms.size >= 3) { score += 20; factors.push('Cross-platform coordination across ' + platforms.size + ' tools'); }
+  else if (platforms.size >= 2) { score += 10; factors.push('Multi-platform workflow'); }
+
+  // Factor 4: Iterative refinement
+  const edits = humanNodes.filter(n => ['edición', 'corrección', 'refinamiento'].includes(n.stage));
+  if (edits.length >= 3) { score += 15; factors.push('Substantial iterative refinement (' + edits.length + ' editing rounds)'); }
+  else if (edits.length >= 1) { score += 8; factors.push('Evidence of human editing'); }
+
+  // Factor 5: Selection/validation
+  const selections = humanNodes.filter(n => ['selección', 'validación'].includes(n.stage));
+  if (selections.length >= 2) { score += 10; factors.push('Active selection and approval decisions'); }
+
+  const strength = score >= 60 ? 'strong' : score >= 35 ? 'moderate' : 'weak';
+  return { strength, score: Math.min(100, score), factors };
+}
 const DOT_RADIUS = 8; // 16px diameter dots
 
 // ── Creative Stages ──────────────────────────────────────────────
@@ -662,6 +758,16 @@ export default function FlowPage() {
     return acc;
   }, {} as Record<string, number>);
 
+  // USCO Classification
+  const uscoWorkType = logs.length > 0 ? classifyWorkType(logs) : null;
+  const uscoCopyrightability = nodes.length > 0 ? assessCopyrightability(nodes) : null;
+  const uscoContribBreakdown = nodes.reduce((acc, n) => {
+    const usco = STAGE_CONFIG[n.stage]?.usco;
+    if (usco) acc[usco] = (acc[usco] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const [showUSCO, setShowUSCO] = useState(false);
+
   // ── Main render ───────────────────────────────────────────────
 
   if (loading) {
@@ -755,6 +861,18 @@ export default function FlowPage() {
             {classifying ? 'Classifying...' : Object.keys(aiStages).length > 0 ? '✓ AI Classified' : '🤖 AI Classify'}
           </button>
 
+          <button
+            onClick={() => setShowUSCO(!showUSCO)}
+            style={{
+              height: 30, padding: '0 14px', fontSize: 11, fontWeight: 700,
+              background: showUSCO ? '#eff6ff' : '#f8fafc',
+              color: showUSCO ? '#2563eb' : '#64748b',
+              border: showUSCO ? '1px solid #bfdbfe' : '1px solid #e2e8f0',
+              borderRadius: 8, cursor: 'pointer',
+            }}>
+            ⚖️ USCO
+          </button>
+
           <div style={{ display: 'flex', gap: 3 }}>
             <button onClick={() => setZoom(z => Math.max(0.2, z - 0.1))}
               style={{ width: 28, height: 28, background: '#f1f5f9', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, color: '#64748b' }}>−</button>
@@ -766,6 +884,90 @@ export default function FlowPage() {
           </div>
         </div>
       </div>
+
+      {/* USCO Classification Panel */}
+      {showUSCO && uscoWorkType && uscoCopyrightability && (
+        <div style={{
+          position: 'fixed', top: 60, left: 20, width: 340, zIndex: 40,
+          background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.08)', padding: 24,
+          fontFamily: 'Inter, -apple-system, sans-serif',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 800, color: '#0f172a' }}>⚖️ USCO Classification</h3>
+            <button onClick={() => setShowUSCO(false)}
+              style={{ background: '#f1f5f9', border: 'none', width: 24, height: 24, borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#64748b' }}>✕</button>
+          </div>
+
+          {/* Work Type */}
+          <div style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 10, border: '1px solid #f0f0f0' }}>
+            <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, marginBottom: 6, letterSpacing: 0.5 }}>Work Type</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 20 }}>{USCO_WORK_TYPES[uscoWorkType.primary].icon}</span>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>{USCO_WORK_TYPES[uscoWorkType.primary].label}</div>
+                <div style={{ fontSize: 10, color: '#94a3b8' }}>{USCO_WORK_TYPES[uscoWorkType.primary].description}</div>
+              </div>
+            </div>
+            {uscoWorkType.secondary && (
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                Also: {USCO_WORK_TYPES[uscoWorkType.secondary].icon} {USCO_WORK_TYPES[uscoWorkType.secondary].label}
+              </div>
+            )}
+            <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 6 }}>
+              Confidence: {uscoWorkType.confidence}%
+              <div style={{ width: '100%', height: 3, background: '#e2e8f0', borderRadius: 2, marginTop: 3 }}>
+                <div style={{ width: `${uscoWorkType.confidence}%`, height: 3, background: '#3b82f6', borderRadius: 2 }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Copyrightability Assessment */}
+          <div style={{ marginBottom: 16, padding: 12, background: uscoCopyrightability.strength === 'strong' ? '#f0fdf4' : uscoCopyrightability.strength === 'moderate' ? '#fffbeb' : '#fef2f2', borderRadius: 10, border: '1px solid #f0f0f0' }}>
+            <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, marginBottom: 6, letterSpacing: 0.5 }}>Copyrightability</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <div style={{
+                fontSize: 22, fontWeight: 800,
+                color: uscoCopyrightability.strength === 'strong' ? '#16a34a' : uscoCopyrightability.strength === 'moderate' ? '#ca8a04' : '#dc2626',
+              }}>{uscoCopyrightability.score}%</div>
+              <div>
+                <div style={{
+                  fontSize: 12, fontWeight: 700, textTransform: 'uppercase',
+                  color: uscoCopyrightability.strength === 'strong' ? '#16a34a' : uscoCopyrightability.strength === 'moderate' ? '#ca8a04' : '#dc2626',
+                }}>{uscoCopyrightability.strength === 'strong' ? 'Strong Case' : uscoCopyrightability.strength === 'moderate' ? 'Moderate Case' : 'Weak Case'}</div>
+                <div style={{ fontSize: 10, color: '#64748b' }}>Human authorship assessment</div>
+              </div>
+            </div>
+            {uscoCopyrightability.factors.slice(0, 4).map((f, i) => (
+              <div key={i} style={{ fontSize: 10, color: '#64748b', marginBottom: 2, paddingLeft: 8, borderLeft: '2px solid #e2e8f0' }}>
+                {f}
+              </div>
+            ))}
+          </div>
+
+          {/* Contribution Breakdown */}
+          <div>
+            <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, marginBottom: 8, letterSpacing: 0.5 }}>Human Contribution Breakdown</div>
+            {Object.entries(uscoContribBreakdown).filter(([k]) => k).map(([key, count]) => {
+              const conf = USCO_CONTRIB_LABELS[key];
+              if (!conf) return null;
+              const total = Object.values(uscoContribBreakdown).reduce((a, b) => a + b, 0);
+              const pct = total > 0 ? Math.round((count / total) * 100) : 0;
+              return (
+                <div key={key} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: conf.color }}>{conf.label}</span>
+                    <span style={{ fontSize: 10, color: '#94a3b8' }}>{count} ({pct}%)</span>
+                  </div>
+                  <div style={{ width: '100%', height: 4, background: '#f1f5f9', borderRadius: 2 }}>
+                    <div style={{ width: `${pct}%`, height: 4, background: conf.color, borderRadius: 2, transition: 'width 0.3s' }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Canvas */}
       <div
