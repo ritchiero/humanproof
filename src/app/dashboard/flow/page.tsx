@@ -34,6 +34,12 @@ const PLATFORM_COLORS: Record<string, { bg: string; border: string; text: string
   manual: { bg: '#f1f5f9', border: '#64748b', text: '#334155', line: '#94a3b8', badge: '#64748b' },
 };
 
+const PLATFORM_LOGOS: Record<string, string> = {
+  claude: 'https://ik.imagekit.io/lawgic/claude-logo.svg',
+  chatgpt: 'https://upload.wikimedia.org/wikipedia/commons/0/04/ChatGPT_logo.svg',
+  midjourney: 'https://upload.wikimedia.org/wikipedia/commons/e/e6/Midjourney_Emblem.png',
+};
+
 const BRANCH_COLORS = {
   revision: '#a855f7', // purple for revision branches
   platformSwitch: '#ea580c', // orange for platform switches
@@ -621,9 +627,14 @@ export default function FlowPage() {
                 color: colors.text,
                 padding: '2px 6px',
                 borderRadius: 4,
-                textTransform: 'uppercase',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
               }}>
-                {node.log.platform}
+                {PLATFORM_LOGOS[node.log.platform] ? (
+                  <img src={PLATFORM_LOGOS[node.log.platform]} alt={node.log.platform} style={{ width: 12, height: 12 }} />
+                ) : null}
+                {node.log.model || node.log.platform.toUpperCase()}
               </span>
               <span style={{
                 background: stageConf.bg,
@@ -655,13 +666,13 @@ export default function FlowPage() {
               {contentPreview.length === 60 && '...'}
             </div>
 
-            {/* Model label */}
-            {node.log.model && (
+            {/* Platform name if logo shown */}
+            {PLATFORM_LOGOS[node.log.platform] && (
               <div style={{
                 fontSize: 8,
                 color: '#94a3b8',
               }}>
-                {node.log.model}
+                {node.log.platform}
               </div>
             )}
           </div>
@@ -690,8 +701,11 @@ export default function FlowPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
-              background: colors.bg, color: colors.text, textTransform: 'uppercase' }}>
-              {log.platform}
+              background: colors.bg, color: colors.text, display: 'flex', alignItems: 'center', gap: 5 }}>
+              {PLATFORM_LOGOS[log.platform] ? (
+                <img src={PLATFORM_LOGOS[log.platform]} alt={log.platform} style={{ width: 14, height: 14 }} />
+              ) : null}
+              {log.model || log.platform.toUpperCase()}
             </span>
             <span style={{ padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
               background: stageConf.bg, color: stageConf.color }}>
