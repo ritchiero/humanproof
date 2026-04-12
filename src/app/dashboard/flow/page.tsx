@@ -322,15 +322,14 @@ export default function FlowPage() {
   };
   const handleMouseUp = () => setDragging(false);
   const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    // Clamp raw delta to ±1, then apply tiny step for smooth zoom
-    const raw = e.deltaY;
-    const step = 0.02; // 2% per tick — very gentle
-    const direction = raw > 0 ? -1 : 1;
-    setZoom(z => {
-      const next = z + direction * step;
-      return Math.min(2, Math.max(0.1, Math.round(next * 100) / 100));
-    });
+    // Only zoom on pinch (Ctrl+scroll or metaKey+scroll)
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const step = 0.03;
+      const direction = e.deltaY > 0 ? -1 : 1;
+      setZoom(z => Math.min(2, Math.max(0.1, Math.round((z + direction * step) * 100) / 100)));
+    }
+    // Otherwise: normal scroll = pan vertically (don't preventDefault)
   };
 
   // ── Render helpers ─────────────────────────────────────────────
@@ -772,7 +771,7 @@ export default function FlowPage() {
       <div
         ref={containerRef}
         style={{
-          marginTop: 52, height: 'calc(100vh - 52px)', overflow: 'hidden',
+          marginTop: 52, height: 'calc(100vh - 52px)', overflow: 'auto',
           background: '#f8fafc',
           cursor: dragging ? 'grabbing' : 'grab',
         }}
