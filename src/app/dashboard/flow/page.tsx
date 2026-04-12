@@ -221,10 +221,12 @@ export default function FlowPage() {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  const [allLogs, setAllLogs] = useState<CaptureLog[]>([]);
   const [logs, setLogs] = useState<CaptureLog[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedNode, setSelectedNode] = useState<FlowNode | null>(null);
+  const [projectFilter, setProjectFilter] = useState<string | null>(null);
   const [aiStages, setAiStages] = useState<Record<string, CreativeStage>>({});
   const [classifying, setClassifying] = useState(false);
   const [zoom, setZoom] = useState(0.85);
@@ -236,8 +238,12 @@ export default function FlowPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const projectParam = params.get('project');
+    if (projectParam) setProjectFilter(projectParam);
+
     if (params.get('demo') === '1') {
       const demoLogs = generateDemoLogs();
+      setAllLogs(demoLogs);
       setLogs(demoLogs);
       setLoading(false);
       fetch('/api/analyze', {
@@ -264,6 +270,7 @@ export default function FlowPage() {
       .then((r) => r.json())
       .then((data) => {
         if (data.logs && data.logs.length > 0) {
+          setAllLogs(data.logs);
           setLogs(data.logs);
           if (data.stages) setAiStages(data.stages);
           setLoading(false);
@@ -280,6 +287,7 @@ export default function FlowPage() {
             // Fallback: load all if no user-specific data
             if (l.length === 0) l = await getAllLogs();
             if (p.length === 0) p = await getAllProjects();
+            setAllLogs(l);
             setLogs(l);
             setProjects(p);
           } catch (err) { console.error(err); }
@@ -288,6 +296,23 @@ export default function FlowPage() {
         return unsub;
       });
   }, [router]);
+
+  // ── Project filtering ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (!projectFilter || allLogs.length === 0) return;
+    // Find matching project by name
+    const matchedProject = projects.find(p => p.name === projectFilter);
+    if (matchedProject && matchedProject.logIds) {
+      const filtered = allLogs.filter(l => matchedProject.logIds.includes(l.id));
+      if (filtered.length > 0) {
+        setLogs(filtered);
+        return;
+      }
+    }
+    // Fallback: fuzzy match on content or conversationUrl
+    // If no project match, show all logs (don't filter)
+  }, [projectFilter, projects, allLogs]);
 
   // ── Build tree graph ──────────────────────────────────────────
 
@@ -852,7 +877,15 @@ export default function FlowPage() {
             style={{ background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', color: '#6366f1', fontWeight: 600 }}>
             ← Dashboard
           </button>
-          <h1 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', letterSpacing: -0.3 }}>Copyrightability Chain</h1>
+          <h1 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', letterSpacing: -0.3 }}>
+            {projectFilter ? projectFilter : 'Copyrightability Chain'}
+          </h1>
+          {projectFilter && (
+            <button onClick={() => { setProjectFilter(null); setLogs(allLogs); }}
+              style={{ fontSize: 10, color: '#6366f1', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontWeight: 600 }}>
+              Show All
+            </button>
+          )}
           <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 500 }}>
             {nodes.length} interactions · {new Set(nodes.map(n => n.conversationUrl || n.log.platform)).size} sessions
           </span>

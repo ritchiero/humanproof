@@ -399,6 +399,12 @@ function renderProjects(content) {
               </div>
             `).join('')}
           </div>
+          <button class="btn btn-flow-link" data-project-name="${p.name.replace(/"/g, '&quot;')}" style="
+            margin-top: 10px; width: 100%; padding: 8px 0; font-size: 12px; font-weight: 700;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6); color: #fff; border: none;
+            border-radius: 8px; cursor: pointer; display: flex; align-items: center;
+            justify-content: center; gap: 6px;
+          ">🌳 Open Copyrightability Chain</button>
         </div>
       `;
     }).join('');
@@ -424,6 +430,17 @@ function renderProjects(content) {
   document.querySelectorAll('.project-name[data-project-idx]').forEach((el) => {
     el.addEventListener('click', () => {
       editProjectName(parseInt(el.getAttribute('data-project-idx')));
+    });
+  });
+
+  // Attach "Open in Flow" button listeners
+  document.querySelectorAll('.btn-flow-link[data-project-name]').forEach((el) => {
+    el.addEventListener('click', async () => {
+      const projectName = el.getAttribute('data-project-name');
+      const config = await chrome.storage.local.get(['hp_api_url']);
+      const baseUrl = config.hp_api_url || 'https://humanproof-3zwqrvoxt-ritchieros-projects.vercel.app';
+      const flowUrl = `${baseUrl}/dashboard/flow?project=${encodeURIComponent(projectName)}`;
+      chrome.tabs.create({ url: flowUrl });
     });
   });
 }
