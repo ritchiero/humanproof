@@ -437,6 +437,45 @@ export default function FlowPage() {
     }
   };
 
+  // ── Keyboard navigation ────────────────────────────────────────
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) return;
+      if (nodes.length === 0) return;
+
+      const currentIdx = selectedNode ? nodes.findIndex(n => n.id === selectedNode.id) : -1;
+
+      if (e.key === 'ArrowDown' || e.key === 'j') {
+        e.preventDefault();
+        const nextIdx = Math.min(currentIdx + 1, nodes.length - 1);
+        setSelectedNode(nodes[nextIdx]);
+      } else if (e.key === 'ArrowUp' || e.key === 'k') {
+        e.preventDefault();
+        const prevIdx = Math.max(currentIdx <= 0 ? 0 : currentIdx - 1, 0);
+        setSelectedNode(nodes[prevIdx]);
+      } else if (e.key === 'Home') {
+        e.preventDefault();
+        setSelectedNode(nodes[0]);
+      } else if (e.key === 'End') {
+        e.preventDefault();
+        setSelectedNode(nodes[nodes.length - 1]);
+      } else if (e.key === 'Escape') {
+        setSelectedNode(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [nodes, selectedNode]);
+
+  // Auto-center on selected node
+  useEffect(() => {
+    if (!selectedNode || !containerRef.current) return;
+    const viewportH = containerRef.current.clientHeight;
+    const targetY = -(selectedNode.y * zoom) + viewportH / 2 - 36;
+    setPan(p => ({ ...p, y: targetY }));
+  }, [selectedNode, zoom]);
+
   // ── Render helpers ─────────────────────────────────────────────
 
   const nodeById = new Map(nodes.map(n => [n.id, n]));
