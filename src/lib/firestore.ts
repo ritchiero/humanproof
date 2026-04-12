@@ -53,6 +53,15 @@ export async function getLogsByProject(projectId: string): Promise<CaptureLog[]>
   return snap.docs.map((d) => d.data() as CaptureLog);
 }
 
+export async function getAllLogs(): Promise<CaptureLog[]> {
+  const q = query(
+    collection(getDb(), 'logs'),
+    orderBy('timestamp', 'desc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as CaptureLog);
+}
+
 export async function deleteLog(logId: string) {
   await deleteDoc(doc(getDb(), 'logs', logId));
 }
@@ -66,6 +75,15 @@ export async function getProjectsByUser(userId: string): Promise<Project[]> {
   const q = query(
     collection(getDb(), 'projects'),
     where('userId', '==', userId),
+    orderBy('updatedAt', 'desc')
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as Project);
+}
+
+export async function getAllProjects(): Promise<Project[]> {
+  const q = query(
+    collection(getDb(), 'projects'),
     orderBy('updatedAt', 'desc')
   );
   const snap = await getDocs(q);

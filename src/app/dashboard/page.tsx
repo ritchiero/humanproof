@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { signOut } from 'firebase/auth';
-import { getProjectsByUser, getLogsByUser, saveLog, createProject } from '@/lib/firestore';
+import { getProjectsByUser, getLogsByUser, getAllLogs, getAllProjects, saveLog, createProject } from '@/lib/firestore';
 import type { Project, CaptureLog } from '@/types';
 
 // ── Colors ──────────────────────────────────────────────────────
@@ -114,11 +114,17 @@ export default function Dashboard() {
           setUser(u);
           // Load persisted data from Firestore
           try {
-            const [firestoreLogs, firestoreProjects] = await Promise.all([
+            let [firestoreLogs, firestoreProjects] = await Promise.all([
               getLogsByUser(u.uid),
               getProjectsByUser(u.uid),
             ]);
-            // Set initial data from Firestore
+            // Fallback: if no user-specific data, load all (hackathon single-user mode)
+            if (firestoreLogs.length === 0) {
+              firestoreLogs = await getAllLogs();
+            }
+            if (firestoreProjects.length === 0) {
+              firestoreProjects = await getAllProjects();
+            }
             if (firestoreLogs.length > 0) setLogs(firestoreLogs);
             if (firestoreProjects.length > 0) setProjects(firestoreProjects);
           } catch (err) {
