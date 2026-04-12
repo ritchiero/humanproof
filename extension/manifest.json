@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "HumanProof — AI Authorship Evidence Logger",
+  "version": "0.1.0",
+  "description": "Automatically captures human-AI interactions for copyright registration evidence.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "sidePanel"
+  ],
+  "host_permissions": [
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*"
+  ],
+  "background": {
+    "service_worker": "dist/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*"
+      ],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidebar.html"
+  },
+  "action": {
+    "default_title": "HumanProof"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
