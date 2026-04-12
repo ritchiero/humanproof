@@ -1,32 +1,62 @@
+'use client';
+
+import { signInWithPopup } from 'firebase/auth';
+import { auth, googleProvider } from '@/lib/firebase';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
 export default function Home() {
+  const router = useRouter();
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = auth.onAuthStateChanged((user) => {
+      if (user) router.push('/dashboard');
+      setLoading(false);
+    });
+    return unsub;
+  }, [router]);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+      router.push('/dashboard');
+    } catch (err) {
+      console.error('Login failed:', err);
+    }
+  };
+
+  if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>Loading...</div>;
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-8">
-      <div className="max-w-2xl text-center">
-        <h1 className="text-5xl font-bold mb-4">
-          Human<span className="text-hp-accent">Proof</span>
-        </h1>
-        <p className="text-xl text-gray-300 mb-8">
-          AI Authorship Evidence Logger
-        </p>
-        <p className="text-gray-400 mb-12">
-          Automatically captures and documents your human-AI interactions.
-          Generates verifiable evidence reports for copyright registration.
-        </p>
-        <div className="flex gap-4 justify-center">
-          <a
-            href="/dashboard"
-            className="px-6 py-3 bg-hp-accent text-white rounded-lg font-medium hover:opacity-90 transition"
-          >
-            Open Dashboard
-          </a>
-          <a
-            href="https://github.com/TODO"
-            className="px-6 py-3 border border-gray-600 text-gray-300 rounded-lg font-medium hover:border-gray-400 transition"
-          >
-            Install Extension
-          </a>
-        </div>
-      </div>
+    <main style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      minHeight: '100vh',
+      background: '#ffffff',
+      fontFamily: '-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif',
+    }}>
+      <h1 style={{ fontSize: '2.5rem', fontWeight: 800, marginBottom: '0.5rem', color: '#1a1a1a' }}>HumanProof</h1>
+      <p style={{ fontSize: '1.1rem', color: '#6b7280', marginBottom: '2rem', textAlign: 'center', maxWidth: 500 }}>
+        AI Authorship Evidence Logger — Automatically document your creative contributions when working with AI.
+      </p>
+      <button
+        onClick={handleLogin}
+        style={{
+          padding: '12px 32px',
+          fontSize: '1rem',
+          fontWeight: 600,
+          background: '#2563eb',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          cursor: 'pointer',
+        }}
+      >
+        Sign in with Google
+      </button>
     </main>
   );
 }

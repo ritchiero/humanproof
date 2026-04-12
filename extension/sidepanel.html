@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HumanProof</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #ffffff;
+      color: #1a1a1a;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .header {
+      padding: 16px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .header h1 { font-size: 16px; font-weight: 700; color: #1a1a1a; }
+    .header .status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+    }
+    .status.active { background: #dcfce7; color: #166534; }
+    .status.inactive { background: #fee2e2; color: #991b1b; }
+    .platform-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
+    .platform-chatgpt { background: #e8f5e9; color: #2e7d32; }
+    .platform-claude { background: #fff3e0; color: #e65100; }
+    .platform-midjourney { background: #e3f2fd; color: #1565c0; }
+    .platform-manual { background: #f3e5f5; color: #7b1fa2; }
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    .tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      color: #6b7280;
+      border-bottom: 2px solid transparent;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+    }
+    .tab.active {
+      color: #1a1a1a;
+      border-bottom-color: #2563eb;
+    }
+    .content { padding: 12px; }
+    .log-entry {
+      padding: 10px;
+      margin-bottom: 8px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .log-entry .meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 4px;
+      font-size: 11px;
+      color: #6b7280;
+    }
+    .log-entry .text {
+      font-size: 12px;
+      color: #1a1a1a;
+      max-height: 60px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .log-type-prompt { border-left: 3px solid #2563eb; }
+    .log-type-response { border-left: 3px solid #16a34a; }
+    .log-type-manual_entry { border-left: 3px solid #9333ea; }
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #9ca3af;
+    }
+    .empty-state h3 { font-size: 14px; margin-bottom: 8px; color: #6b7280; }
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .btn-primary { background: #2563eb; color: white; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary { background: #f3f4f6; color: #374151; }
+    .btn-secondary:hover { background: #e5e7eb; }
+    .btn-danger { background: #fee2e2; color: #991b1b; }
+    .stats { display: flex; gap: 12px; padding: 12px; background: #f9fafb; border-radius: 8px; margin-bottom: 12px; }
+    .stat { flex: 1; text-align: center; }
+    .stat .number { font-size: 20px; font-weight: 700; color: #2563eb; }
+    .stat .label { font-size: 10px; color: #6b7280; text-transform: uppercase; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>HumanProof</h1>
+    <span class="status" id="status">—</span>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="logs">Live Logs</div>
+    <div class="tab" data-tab="projects">Projects</div>
+    <div class="tab" data-tab="report">Report</div>
+  </div>
+
+  <div class="content" id="content">
+    <div class="empty-state">
+      <h3>Waiting for AI interactions...</h3>
+      <p>Navigate to ChatGPT, Claude, or Discord and start a conversation. HumanProof will capture your interactions automatically.</p>
+    </div>
+  </div>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

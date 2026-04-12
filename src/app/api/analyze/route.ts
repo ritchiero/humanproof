@@ -1,91 +1,124 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { Interaction, ContributionAnalysis } from '@/lib/types';
+import Anthropic from '@anthropic-ai/sdk';
+import type { CaptureLog } from '@/types';
 
-/**
- * POST /api/analyze
- * Sends project interactions to Claude API for contribution analysis.
- * Returns: ContributionAnalysis with USCO categorization + authorship justification.
- */
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
+
 export async function POST(req: NextRequest) {
   try {
-    const { projectId, interactions }: { projectId: string; interactions: Interaction[] } =
-      await req.json();
+    const { logs, action } = await req.json() as { logs: CaptureLog[]; action: 'detect_projects' | 'categorize' | 'justify' };
 
-    if (!interactions?.length) {
-      return NextResponse.json({ error: 'No interactions provided' }, { status: 400 });
-    }
-
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) {
-      return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });
-    }
-
-    // Build the analysis prompt
-    const systemPrompt = `You are HumanProof's legal analysis engine. Analyze a series of human-AI interactions and produce a contribution analysis for copyright registration under the USCO framework.
-
-For each interaction, categorize the human contribution as one or more of:
-- SELECTION: The human accepted, rejected, or chose among AI outputs
-- COORDINATION: The human combined outputs from multiple sessions or platforms
-- ARRANGEMENT: The human ordered, structured, or composed outputs into a whole
-- MODIFICATION: The human iterated, edited, or refined AI outputs
-- EXPRESSIVE_INPUT: The human provided original creative content as input to the AI
-
-Then produce an authorship justification narrative that explains:
-1. How the human directed the creative project
-2. Evidence of creative intent and decision-making
-3. The role of AI as a tool, not a creator
-4. How contributions map to USCO requirements
-
-Respond in JSON matching this schema:
-{
-  "contributions": [{ "type": string, "description": string, "interactionIds": string[], "strength": "strong"|"moderate"|"weak" }],
-  "authorshipJustification": string
-}`;
-
-    const userPrompt = `Analyze these ${interactions.length} interactions for project "${projectId}":\n\n${JSON.stringify(interactions, null, 2)}`;
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
+    if (action === 'detect_projects') {
+      const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 4096,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
+        system: `You are HumanProof's AI analysis engine. You analyze logs of human-AI interactions to detect distinct creative projects.
 
-    if (!response.ok) {
-      const err = await response.text();
-      console.error('[HumanProof API] Claude API error:', err);
-      return NextResponse.json({ error: 'AI analysis failed' }, { status: 502 });
+Given a list of interaction logs (prompts and responses across AI platforms), group them into distinct projects based on thematic coherence. For each project, provide:
+- A descriptive name
+- Which log IDs belong to it
+- When the project started (first log timestamp)
+- Which platforms were used
+
+Respond ONLY in valid JSON with this structure:
+{
+  "projects": [
+    {
+      "name": "string",
+      "logIds": ["string"],
+      "startedAt": "ISO timestamp",
+      "platforms": ["string"]
+    }
+  ]
+}`,
+        messages: [
+          {
+            role: 'user',
+            content: `Analyze these interaction logs and group them into projects:\n\n${JSON.stringify(logs, null, 2)}`,
+          },
+        ],
+      });
+
+      const text = response.content.find((c) => c.type === 'text')?.text || '';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+      return NextResponse.json(parsed);
     }
 
-    const result = await response.json();
-    const content = result.content?.[0]?.text;
+    if (action === 'categorize') {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: `You are HumanProof's AI analysis engine. You categorize human contributions in AI-assisted creative work using the USCO (U.S. Copyright Office) authorship framework.
 
-    // Parse Claude's JSON response
-    const jsonMatch = content?.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 502 });
+For each interaction log, determine the contribution type:
+- "selection": The human accepted or rejected AI outputs
+- "coordination": The human combined outputs from multiple platforms or sessions
+- "arrangement": The human ordered, structured, or composed outputs into a whole
+- "modification": The human iterated, edited, or refined AI outputs
+- "expressive_input": The human provided their own creative content as input to the AI
+
+Respond ONLY in valid JSON:
+{
+  "categorized": [
+    { "logId": "string", "contributionType": "string", "reasoning": "string" }
+  ]
+}`,
+        messages: [
+          {
+            role: 'user',
+            content: `Categorize the human contributions in these logs:\n\n${JSON.stringify(logs, null, 2)}`,
+          },
+        ],
+      });
+
+      const text = response.content.find((c) => c.type === 'text')?.text || '';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+      return NextResponse.json(parsed);
     }
 
-    const analysis = JSON.parse(jsonMatch[0]);
+    if (action === 'justify') {
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: `You are HumanProof's AI analysis engine. You generate authorship justification narratives for AI-assisted creative works.
 
-    const contributionAnalysis: ContributionAnalysis = {
-      projectId,
-      contributions: analysis.contributions,
-      authorshipJustification: analysis.authorshipJustification,
-      analyzedAt: new Date().toISOString(),
-    };
+Given a set of categorized interaction logs for a project, write a professional authorship justification that:
+1. Explains how the human directed the creative process
+2. Documents evidence of creative intent and decision-making
+3. Describes the role of AI as a tool, not the creator
+4. Maps contributions to the USCO framework (selection, coordination, arrangement, modification, expressive inputs)
+5. Could be included in a copyright registration application
 
-    return NextResponse.json(contributionAnalysis);
-  } catch (error) {
-    console.error('[HumanProof API] Analysis error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+The narrative should be factual, evidence-based, and written in a professional legal tone. It should reference specific interactions as evidence.
+
+Respond ONLY in valid JSON:
+{
+  "justification": "string (the full narrative)",
+  "summary": "string (2-3 sentence summary)",
+  "strengthAssessment": "strong | moderate | weak",
+  "recommendations": ["string"]
+}`,
+        messages: [
+          {
+            role: 'user',
+            content: `Generate an authorship justification for this project's interaction logs:\n\n${JSON.stringify(logs, null, 2)}`,
+          },
+        ],
+      });
+
+      const text = response.content.find((c) => c.type === 'text')?.text || '';
+      const clean = text.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(clean);
+      return NextResponse.json(parsed);
+    }
+
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+  } catch (error: any) {
+    console.error('Analysis error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

@@ -7,8 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "ext:build": "tsup extension/background.ts extension/content.ts --out-dir extension/dist --format esm --clean",
-    "ext:watch": "tsup extension/background.ts extension/content.ts --out-dir extension/dist --format esm --watch"
+    "ext:dev": "echo 'Extension uses plain JS — no build step needed. Load extension/ folder directly in Chrome.'"
   },
   "dependencies": {
     "next": "^14.2.0",
@@ -18,10 +17,12 @@
     "firebase-admin": "^12.1.0",
     "jspdf": "^2.5.1",
     "qrcode": "^1.5.3",
-    "@anthropic-ai/sdk": "^0.24.0"
+    "@anthropic-ai/sdk": "^0.24.0",
+    "crypto-js": "^4.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "@types/crypto-js": "^4.2.2",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
     "@types/chrome": "^0.0.268",
