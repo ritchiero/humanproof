@@ -61,8 +61,35 @@ const STAGE_CONFIG: Record<CreativeStage, { emoji: string; color: string; bg: st
   'respuesta':    { emoji: '🤖', color: '#6b7280', bg: '#f9fafb', usco: '' },
 };
 
+function inferIsHumanPrompt(log: CaptureLog): boolean {
+  const text = (log.content || '').trim();
+  // Explicit type wins
+  if (log.type === 'prompt') return true;
+  if (log.type === 'response') {
+    // But if content looks like a human instruction, override
+    const lower = text.toLowerCase();
+    const len = text.length;
+    // Short messages are likely prompts
+    if (len < 200) {
+      // Questions
+      if (text.includes('?') || lower.startsWith('qué') || lower.startsWith('cómo') || lower.startsWith('what') || lower.startsWith('how') || lower.startsWith('can you')) return true;
+      // Instructions
+      if (lower.match(/^(haz|hazme|crea|genera|escribe|write|create|make|build|design|draft|dame|give me|show me|manda|pon|agrega|add|cambia|change|fix|arregl)/)) return true;
+      // Very short = likely prompt
+      if (len < 80) return true;
+    }
+    return false;
+  }
+  // No type field — use heuristics
+  const len = text.length;
+  if (len < 150) return true; // short = human
+  if (text.includes('```') || text.split('\n').length > 10) return false; // code/structured = AI
+  if (len > 500) return false; // long = AI response
+  return len < 250; // medium = probably human
+}
+
 function detectStage(log: CaptureLog, index: number, allLogs: CaptureLog[]): CreativeStage {
-  if (log.type === 'response') return 'respuesta';
+  if (!inferIsHumanPrompt(log)) return 'respuesta';
   const text = (log.content || '').toLowerCase();
   if (text.match(/combin|junt|merg|integr|une|mezcl|from.*and|junto con|final version|versión final/)) return 'combinación';
   if (text.match(/me gusta|i like|prefiero|prefer|elijo|choose|el \d|option \d|concepto \d|let'?s go with/)) return 'selección';
@@ -503,7 +530,7 @@ export default function FlowPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20 }}>
           <div>
             <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, marginBottom: 2 }}>Type</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{log.type}</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{inferIsHumanPrompt(log) ? 'Human Prompt' : 'AI Response'}</div>
           </div>
           <div>
             <div style={{ fontSize: 9, color: '#94a3b8', textTransform: 'uppercase', fontWeight: 700, marginBottom: 2 }}>Time</div>
