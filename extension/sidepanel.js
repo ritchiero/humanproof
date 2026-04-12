@@ -41,7 +41,12 @@ const TYPE_DISPLAY = {
 
 function formatTime(iso) {
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const today = new Date();
+  const isToday = d.toDateString() === today.toDateString();
+  if (isToday) return `Today ${time}`;
+  const date = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  return `${date} ${time}`;
 }
 
 function truncate(text, max = 120) {
