@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
-import { getLogsByUser, getProjectsByUser } from '@/lib/firestore';
+import { getLogsByUser, getProjectsByUser, getAllLogs, getAllProjects } from '@/lib/firestore';
 import type { CaptureLog, Project } from '@/types';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -140,7 +140,10 @@ export default function FlowPage() {
         const unsub = auth.onAuthStateChanged(async (u) => {
           if (!u) { router.push('/'); return; }
           try {
-            const [l, p] = await Promise.all([getLogsByUser(u.uid), getProjectsByUser(u.uid)]);
+            let [l, p] = await Promise.all([getLogsByUser(u.uid), getProjectsByUser(u.uid)]);
+            // Fallback: load all if no user-specific data
+            if (l.length === 0) l = await getAllLogs();
+            if (p.length === 0) p = await getAllProjects();
             setLogs(l);
             setProjects(p);
           } catch (err) { console.error(err); }
