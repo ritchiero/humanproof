@@ -206,7 +206,7 @@ export default function Dashboard() {
               Creative Flow ⎇
             </button>
             {!isDemo && (
-              <button onClick={() => signOut(auth)}
+              <button onClick={() => auth && signOut(auth)}
                 style={{ padding: '7px 16px', fontSize: 12, background: '#f3f4f6', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                 Sign Out
               </button>
