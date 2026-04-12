@@ -247,7 +247,7 @@ export default function Dashboard() {
         {projectColors.length > 0 && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
             {projectColors.slice(0, 7).map(({ project, color }, i) => (
-              <div key={i} style={{
+              <div key={i} onClick={() => router.push('/dashboard/flow?project=' + encodeURIComponent(project.name))} style={{ cursor: 'pointer',
                 display: 'inline-flex', alignItems: 'center', gap: 6,
                 padding: '5px 14px', borderRadius: 20,
                 background: color.bg, fontSize: 12, fontWeight: 600, color: color.text,
