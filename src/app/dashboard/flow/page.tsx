@@ -289,7 +289,9 @@ export default function FlowPage() {
   const handleMouseUp = () => setDragging(false);
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
-    setZoom(z => Math.min(2, Math.max(0.2, z + (e.deltaY > 0 ? -0.08 : 0.08))));
+    // Normalize: trackpads send small deltas, mice send large ones
+    const delta = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 50) * 0.0008;
+    setZoom(z => Math.min(2, Math.max(0.15, z - delta)));
   };
 
   // ── Render helpers ─────────────────────────────────────────────
