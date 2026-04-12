@@ -77,7 +77,7 @@ export default function Dashboard() {
             createdAt: p.startedAt || new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           };
-          createProject(project).catch(() => {});
+          if (!projects.some((ep) => ep.name === p.name)) createProject(project).catch(() => {});
         }
       }
     } catch (err) {
@@ -145,15 +145,23 @@ export default function Dashboard() {
   const activeProjects = useMemo(() => {
     if (isDemo) return demoProjects;
     // Merge Firestore projects with auto-detected projects, deduplicate by name
-    const all: DemoProject[] = [...projects.map((p) => ({
-      name: p.name,
-      description: p.description || '',
-      logIds: [],
-      platforms: p.platforms || [],
-      startedAt: p.createdAt,
-    }))];
+    const seen = new Set<string>();
+    const all: DemoProject[] = [];
+    for (const p of projects) {
+      if (!seen.has(p.name)) {
+        seen.add(p.name);
+        all.push({
+          name: p.name,
+          description: p.description || '',
+          logIds: [],
+          platforms: p.platforms || [],
+          startedAt: p.createdAt,
+        });
+      }
+    }
     for (const dp of demoProjects) {
-      if (!all.find((a) => a.name === dp.name)) {
+      if (!seen.has(dp.name)) {
+        seen.add(dp.name);
         all.push(dp);
       }
     }
