@@ -444,7 +444,7 @@ async function detectProjects() {
   try {
     // Get the dashboard URL from storage or use default
     const config = await chrome.storage.local.get(['hp_api_url']);
-    const apiUrl = config.hp_api_url || 'http://localhost:3000';
+    const apiUrl = config.hp_api_url || 'https://humanproof-3zwqrvoxt-ritchieros-projects.vercel.app';
 
     const response = await fetch(`${apiUrl}/api/analyze`, {
       method: 'POST',
@@ -628,7 +628,7 @@ async function generateReport() {
 
   try {
     const config = await chrome.storage.local.get(['hp_api_url']);
-    const apiUrl = config.hp_api_url || 'http://localhost:3000';
+    const apiUrl = config.hp_api_url || 'https://humanproof-3zwqrvoxt-ritchieros-projects.vercel.app';
 
     // Step 1: Categorize contributions
     statusEl.textContent = 'Step 1/2: Categorizing contributions...';
@@ -773,7 +773,7 @@ window.showScreenshot = showScreenshot;
 
   // Load saved API URL
   chrome.storage.local.get(['hp_api_url'], (result) => {
-    apiInput.value = result.hp_api_url || 'http://localhost:3000';
+    apiInput.value = result.hp_api_url || 'https://humanproof-3zwqrvoxt-ritchieros-projects.vercel.app';
   });
 
   // Save API URL on change

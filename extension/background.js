@@ -2,7 +2,7 @@
 
 // ── Config ───────────────────────────────────────────────────────
 const API_URL_KEY = 'hp_api_url';
-const DEFAULT_API = 'http://localhost:3000';
+const DEFAULT_API = 'https://humanproof-3zwqrvoxt-ritchieros-projects.vercel.app';
 const GENESIS_HASH = '0000000000000000000000000000000000000000000000000000000000000000';
 
 // Auto-analysis thresholds
@@ -507,6 +507,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     chrome.storage.local.get(['hp_projects'], (result) => {
       sendResponse({ projects: result.hp_projects || [] });
     });
+    return true;
+  }
+
+  if (message.type === 'SYNC_ALL_LOGS') {
+    (async () => {
+      try {
+        const result = await chrome.storage.local.get(['logs']);
+        const logs = result.logs || [];
+        if (logs.length === 0) {
+          sendResponse({ success: true, count: 0 });
+          return;
+        }
+        const apiUrl = await getApiUrl();
+        const resp = await fetch(`${apiUrl}/api/logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'sync', logs }),
+        });
+        const data = await resp.json();
+        sendResponse({ success: true, count: logs.length, serverCount: data.count });
+      } catch (err) {
+        sendResponse({ success: false, error: err.message });
+      }
+    })();
     return true;
   }
 
