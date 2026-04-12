@@ -75,21 +75,21 @@ Respond ONLY in valid JSON with this structure:
         max_tokens: 4096,
         system: `You classify human-AI interaction logs into creative stages. For each log, assign ONE stage from this list:
 
-- "ideación": First creative spark, initial concept, starting a new idea
-- "dirección": Giving specific creative instructions (style, tone, color, layout, format)
-- "exploración": Asking for variations, alternatives, options, "what if" scenarios
-- "selección": Choosing between options ("I like #3", "prefer this one", "let's go with")
-- "edición": Modifying output ("change X", "add Y", "remove Z", "replace")
-- "corrección": Fixing errors ("bug", "wrong", "doesn't work", "fix this")
-- "combinación": Merging outputs from different sources/platforms/conversations
-- "refinamiento": Iterating to improve ("make it more X", "less Y", "adjust", "subtle")
-- "validación": Approving final result ("perfect", "approved", "looks good", "ship it")
-- "respuesta": AI-generated response (not a human contribution)
+- "ideation": First creative spark, initial concept, starting a new idea
+- "direction": Giving specific creative instructions (style, tone, color, layout, format)
+- "exploration": Asking for variations, alternatives, options, "what if" scenarios
+- "selection": Choosing between options ("I like #3", "prefer this one", "let's go with")
+- "editing": Modifying output ("change X", "add Y", "remove Z", "replace")
+- "correction": Fixing errors ("bug", "wrong", "doesn't work", "fix this")
+- "combination": Merging outputs from different sources/platforms/conversations
+- "refinement": Iterating to improve ("make it more X", "less Y", "adjust", "subtle")
+- "validation": Approving final result ("perfect", "approved", "looks good", "ship it")
+- "response": AI-generated response (not a human contribution)
 
 Rules:
-- AI responses (type="response") are ALWAYS "respuesta"
-- The first human prompt in a conversation is usually "ideación" unless it references prior work
-- Be precise — "dirección" vs "edición" depends on whether they're setting style or changing content
+- AI responses (type="response") are ALWAYS "response"
+- The first human prompt in a conversation is usually "ideation" unless it references prior work
+- Be precise — "direction" vs "editing" depends on whether they're setting style or changing content
 
 Respond ONLY in valid JSON:
 {

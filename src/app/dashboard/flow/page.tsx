@@ -108,7 +108,7 @@ function classifyWorkType(logs: CaptureLog[]): { primary: USCOWorkType; secondar
 }
 
 function assessCopyrightability(nodes: FlowNode[]): { strength: 'strong' | 'moderate' | 'weak'; score: number; factors: string[] } {
-  const humanNodes = nodes.filter(n => n.stage !== 'respuesta');
+  const humanNodes = nodes.filter(n => n.stage !== 'response');
   const totalNodes = nodes.length;
   const humanRatio = totalNodes > 0 ? humanNodes.length / totalNodes : 0;
   const factors: string[] = [];
@@ -131,12 +131,12 @@ function assessCopyrightability(nodes: FlowNode[]): { strength: 'strong' | 'mode
   else if (platforms.size >= 2) { score += 10; factors.push('Multi-platform workflow'); }
 
   // Factor 4: Iterative refinement
-  const edits = humanNodes.filter(n => ['edición', 'corrección', 'refinamiento'].includes(n.stage));
+  const edits = humanNodes.filter(n => ['editing', 'correction', 'refinement'].includes(n.stage));
   if (edits.length >= 3) { score += 15; factors.push('Substantial iterative refinement (' + edits.length + ' editing rounds)'); }
   else if (edits.length >= 1) { score += 8; factors.push('Evidence of human editing'); }
 
   // Factor 5: Selection/validation
-  const selections = humanNodes.filter(n => ['selección', 'validación'].includes(n.stage));
+  const selections = humanNodes.filter(n => ['selection', 'validation'].includes(n.stage));
   if (selections.length >= 2) { score += 10; factors.push('Active selection and approval decisions'); }
 
   const strength = score >= 60 ? 'strong' : score >= 35 ? 'moderate' : 'weak';
@@ -147,21 +147,21 @@ const DOT_RADIUS = 8; // 16px diameter dots
 // ── Creative Stages ──────────────────────────────────────────────
 
 type CreativeStage =
-  | 'ideación' | 'dirección' | 'exploración' | 'selección'
-  | 'edición' | 'corrección' | 'combinación' | 'refinamiento'
-  | 'validación' | 'respuesta';
+  | 'ideation' | 'direction' | 'exploration' | 'selection'
+  | 'editing' | 'correction' | 'combination' | 'refinement'
+  | 'validation' | 'response';
 
 const STAGE_CONFIG: Record<CreativeStage, { emoji: string; color: string; bg: string; usco: string }> = {
-  'ideación':     { emoji: '💡', color: '#7c3aed', bg: '#f5f3ff', usco: 'EXPRESSIVE_INPUT' },
-  'dirección':    { emoji: '🎯', color: '#2563eb', bg: '#eff6ff', usco: 'EXPRESSIVE_INPUT' },
-  'exploración':  { emoji: '🔍', color: '#0891b2', bg: '#ecfeff', usco: 'COORDINATION' },
-  'selección':    { emoji: '✓',  color: '#16a34a', bg: '#f0fdf4', usco: 'SELECTION' },
-  'edición':      { emoji: '✏️', color: '#ca8a04', bg: '#fefce8', usco: 'MODIFICATION' },
-  'corrección':   { emoji: '🔧', color: '#dc2626', bg: '#fef2f2', usco: 'MODIFICATION' },
-  'combinación':  { emoji: '🧩', color: '#9333ea', bg: '#faf5ff', usco: 'COORDINATION' },
-  'refinamiento': { emoji: '✨', color: '#ea580c', bg: '#fff7ed', usco: 'ARRANGEMENT' },
-  'validación':   { emoji: '✅', color: '#059669', bg: '#ecfdf5', usco: 'SELECTION' },
-  'respuesta':    { emoji: '🤖', color: '#6b7280', bg: '#f9fafb', usco: '' },
+  'ideation':    { emoji: '💡', color: '#7c3aed', bg: '#f5f3ff', usco: 'EXPRESSIVE_INPUT' },
+  'direction':   { emoji: '🎯', color: '#2563eb', bg: '#eff6ff', usco: 'EXPRESSIVE_INPUT' },
+  'exploration': { emoji: '🔍', color: '#0891b2', bg: '#ecfeff', usco: 'COORDINATION' },
+  'selection':   { emoji: '✓',  color: '#16a34a', bg: '#f0fdf4', usco: 'SELECTION' },
+  'editing':     { emoji: '✏️', color: '#ca8a04', bg: '#fefce8', usco: 'MODIFICATION' },
+  'correction':  { emoji: '🔧', color: '#dc2626', bg: '#fef2f2', usco: 'MODIFICATION' },
+  'combination': { emoji: '🧩', color: '#9333ea', bg: '#faf5ff', usco: 'COORDINATION' },
+  'refinement':  { emoji: '✨', color: '#ea580c', bg: '#fff7ed', usco: 'ARRANGEMENT' },
+  'validation':  { emoji: '✅', color: '#059669', bg: '#ecfdf5', usco: 'SELECTION' },
+  'response':    { emoji: '🤖', color: '#6b7280', bg: '#f9fafb', usco: '' },
 };
 
 function inferIsHumanPrompt(log: CaptureLog): boolean {
@@ -192,20 +192,20 @@ function inferIsHumanPrompt(log: CaptureLog): boolean {
 }
 
 function detectStage(log: CaptureLog, index: number, allLogs: CaptureLog[]): CreativeStage {
-  if (!inferIsHumanPrompt(log)) return 'respuesta';
+  if (!inferIsHumanPrompt(log)) return 'response';
   const text = (log.content || '').toLowerCase();
-  if (text.match(/combin|junt|merg|integr|une|mezcl|from.*and|junto con|final version|versión final/)) return 'combinación';
-  if (text.match(/me gusta|i like|prefiero|prefer|elijo|choose|el \d|option \d|concepto \d|let'?s go with/)) return 'selección';
-  if (text.match(/error|bug|fix|arregl|correg|wrong|mal|equivoc|no funciona/)) return 'corrección';
-  if (text.match(/perfect|listo|aprobad|approved|looks good|está bien|go ahead|ship it|así está bien|confirmo/)) return 'validación';
-  if (text.match(/cambia|change|modific|edit|replac|reemplaz|swap|quita|remove|agrega|add|pon|put/)) return 'edición';
-  if (text.match(/más|more|menos|less|mejor|better|pero |hazlo|make it|adjust|tweak|sutil|slight|un poco/)) return 'refinamiento';
-  if (text.match(/estilo|style|tono|tone|color|palette|font|tipograf|layout|diseño|format|estructura/)) return 'dirección';
-  if (text.match(/variac|variation|altern|option|opcion|dame \d|give me \d|explor|qué tal si|what if|prueba|try|imagina|otra/)) return 'exploración';
+  if (text.match(/combin|junt|merg|integr|une|mezcl|from.*and|junto con|final version|versión final/)) return 'combination';
+  if (text.match(/me gusta|i like|prefiero|prefer|elijo|choose|el \d|option \d|concepto \d|let'?s go with/)) return 'selection';
+  if (text.match(/error|bug|fix|arregl|correg|wrong|mal|equivoc|no funciona/)) return 'correction';
+  if (text.match(/perfect|listo|aprobad|approved|looks good|está bien|go ahead|ship it|así está bien|confirmo/)) return 'validation';
+  if (text.match(/cambia|change|modific|edit|replac|reemplaz|swap|quita|remove|agrega|add|pon|put/)) return 'editing';
+  if (text.match(/más|more|menos|less|mejor|better|pero |hazlo|make it|adjust|tweak|sutil|slight|un poco/)) return 'refinement';
+  if (text.match(/estilo|style|tono|tone|color|palette|font|tipograf|layout|diseño|format|estructura/)) return 'direction';
+  if (text.match(/variac|variation|altern|option|opcion|dame \d|give me \d|explor|qué tal si|what if|prueba|try|imagina|otra/)) return 'exploration';
   const sameConv = allLogs.filter((l) => (l as any).conversationUrl === (log as any).conversationUrl && l.type === 'prompt');
   const isFirst = sameConv.length === 0 || sameConv[0]?.id === log.id;
-  if (isFirst) return 'ideación';
-  return 'dirección';
+  if (isFirst) return 'ideation';
+  return 'direction';
 }
 
 // ── Component ────────────────────────────────────────────────────
@@ -378,7 +378,7 @@ export default function FlowPage() {
 
     // Detect merge edges: when content references combining from multiple sources
     for (const node of nodes) {
-      if (node.stage === 'combinación') {
+      if (node.stage === 'combination') {
         // Find the last node from each other active conversation
         for (const [convKey, lastNode] of lastNodeByConv) {
           const thisConvKey = node.conversationUrl || `${node.log.platform}_default`;
@@ -754,7 +754,7 @@ export default function FlowPage() {
   // ── Top bar ───────────────────────────────────────────────────
 
   const stageSummary = nodes.reduce((acc, n) => {
-    if (n.stage !== 'respuesta') acc[n.stage] = (acc[n.stage] || 0) + 1;
+    if (n.stage !== 'response') acc[n.stage] = (acc[n.stage] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
 
