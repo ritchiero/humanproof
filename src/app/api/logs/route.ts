@@ -42,6 +42,21 @@ export async function GET() {
     }
   }
 
+  // Also load projects from Firestore if empty
+  if (projectsStore.length === 0 && db) {
+    try {
+      const pSnap = await getDocs(collection(db, 'projects'));
+      for (const d of pSnap.docs) {
+        const data = d.data();
+        if (!projectsStore.find((p: any) => p.id === data.id)) {
+          projectsStore.push(data);
+        }
+      }
+    } catch (e) {
+      console.error('[logs] Firestore projects load error:', e);
+    }
+  }
+
   return NextResponse.json({
     logs: logsStore,
     projects: projectsStore,

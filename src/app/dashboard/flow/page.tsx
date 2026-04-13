@@ -273,6 +273,7 @@ export default function FlowPage() {
           setAllLogs(data.logs);
           setLogs(data.logs);
           if (data.stages) setAiStages(data.stages);
+          if (data.projects) setProjects(data.projects);
           setLoading(false);
         } else {
           throw new Error('no live logs');

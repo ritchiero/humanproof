@@ -482,6 +482,14 @@ async function detectProjects() {
       projects = data.projects;
       // Persist to storage
       await chrome.storage.local.set({ hp_projects: projects });
+      // Sync projects to API so flow page can load them
+      const config = await chrome.storage.local.get(['hp_api_url']);
+      const syncUrl = config.hp_api_url || 'https://humanproof-3zwqrvoxt-ritchieros-projects.vercel.app';
+      fetch(`${syncUrl}/api/logs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'projects', projects }),
+      }).catch(e => console.error('[HumanProof] Sync projects error:', e));
       statusEl.textContent = `Found ${projects.length} project${projects.length !== 1 ? 's' : ''}!`;
       render();
     } else {
