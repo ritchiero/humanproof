@@ -439,6 +439,26 @@ function renderProjects(content) {
       const projectName = el.getAttribute('data-project-name');
       const config = await chrome.storage.local.get(['hp_api_url']);
       const baseUrl = config.hp_api_url || 'https://humanproof-3zwqrvoxt-ritchieros-projects.vercel.app';
+
+      // Sync projects AND logs to API before opening flow
+      el.textContent = '⏳ Syncing...';
+      try {
+        // Sync all projects
+        await fetch(`${baseUrl}/api/logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'projects', projects }),
+        });
+        // Sync all logs so the flow page can find them
+        await fetch(`${baseUrl}/api/logs`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'sync', logs }),
+        });
+      } catch (e) {
+        console.error('[HumanProof] Pre-sync error:', e);
+      }
+
       const flowUrl = `${baseUrl}/dashboard/flow?project=${encodeURIComponent(projectName)}`;
       chrome.tabs.create({ url: flowUrl });
     });
